@@ -6,6 +6,7 @@ import { DEFAULT_SERVER, normalizeServerInput } from './servers';
 export interface ProfileConfig {
   email?: string;
   userName?: string;
+  organismeRef?: string;
   updatedAt?: string;
 }
 

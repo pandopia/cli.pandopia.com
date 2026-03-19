@@ -13,6 +13,7 @@ export interface SessionAuthState {
   server: string;
   email?: string;
   userName?: string;
+  organismeRef?: string;
   accessToken: string | null;
   refreshToken: string | null;
   clientId: string | null;
@@ -24,6 +25,7 @@ export interface SessionStatus {
   alias: string | null;
   email?: string;
   userName?: string;
+  organismeRef?: string;
   loggedIn: boolean;
 }
 
@@ -54,6 +56,7 @@ export class SessionStore {
       alias: getServerAlias(normalized),
       email: profile?.email,
       userName: profile?.userName,
+      organismeRef: profile?.organismeRef,
       loggedIn: !!accessToken,
     };
   }
@@ -71,6 +74,7 @@ export class SessionStore {
       server: normalized,
       email: profile?.email,
       userName: profile?.userName,
+      organismeRef: profile?.organismeRef,
       accessToken: values[0],
       refreshToken: values[1],
       clientId: values[2],
@@ -83,6 +87,7 @@ export class SessionStore {
     data: {
       email: string;
       userName?: string;
+      organismeRef?: string;
       accessToken: string;
       refreshToken?: string;
       clientId: string;
@@ -94,6 +99,7 @@ export class SessionStore {
     await this.configStore.upsertProfile(normalized, {
       email: data.email,
       userName: data.userName,
+      organismeRef: data.organismeRef,
     });
     await this.secretStore.set(normalized, 'access_token', data.accessToken);
     await this.secretStore.set(normalized, 'client_id', data.clientId);

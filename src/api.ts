@@ -1,11 +1,13 @@
 import type {
   AccessTokenResponse,
+  CatalogParamHistoryResponse,
   CatalogListResponse,
   CatalogObjectResponse,
   CatalogParamsResponse,
   CatalogTypesResponse,
   LoginEnsureClientResponse,
   MultipleAccountUser,
+  WhoIAmResponse,
 } from './types';
 import type { Prompt } from './prompt';
 import { getAuthBaseUrl, getCatalogBaseUrl, normalizeServerInput } from './servers';
@@ -160,10 +162,11 @@ export class PandopiaApiClient {
     email: string,
     password: string,
     prompt: Prompt
-  ): Promise<{ server: string; email: string; userName?: string }> {
+  ): Promise<{ server: string; email: string; userName?: string; organismeRef?: string }> {
     const normalized = normalizeServerInput(server);
     const authBase = getAuthBaseUrl(normalized);
     let selectedUserId: string | undefined;
+    let selectedUser: MultipleAccountUser | undefined;
     let loginEnsure = await this.requestLoginEnsureClient({
       authBase,
       email,
@@ -171,7 +174,8 @@ export class PandopiaApiClient {
     });
 
     if (loginEnsure.response.status === 300) {
-      selectedUserId = await this.promptForUserId(loginEnsure.payload, prompt);
+      selectedUser = await this.promptForUser(loginEnsure.payload, prompt);
+      selectedUserId = String(selectedUser.id);
       loginEnsure = await this.requestLoginEnsureClient({
         authBase,
         email,
@@ -185,6 +189,8 @@ export class PandopiaApiClient {
     let clientId = loginEnsure.payload?.data?.client_id;
     let clientSecret = loginEnsure.payload?.data?.client_secret;
     let userName = loginEnsure.payload?.data?.user?.name;
+    let organismeRef =
+      loginEnsure.payload?.data?.user?.organismeRef || selectedUser?.organismeRef;
 
     if (!clientId || !clientSecret) {
       throw new ApiError(
@@ -204,7 +210,8 @@ export class PandopiaApiClient {
     });
 
     if (tokenPayload.response.status === 300) {
-      selectedUserId = await this.promptForUserId(tokenPayload.payload, prompt);
+      selectedUser = await this.promptForUser(tokenPayload.payload, prompt);
+      selectedUserId = String(selectedUser.id);
       loginEnsure = await this.requestLoginEnsureClient({
         authBase,
         email,
@@ -216,6 +223,8 @@ export class PandopiaApiClient {
       clientId = loginEnsure.payload?.data?.client_id;
       clientSecret = loginEnsure.payload?.data?.client_secret;
       userName = loginEnsure.payload?.data?.user?.name;
+      organismeRef =
+        loginEnsure.payload?.data?.user?.organismeRef || selectedUser?.organismeRef;
 
       if (!clientId || !clientSecret) {
         throw new ApiError(
@@ -257,6 +266,7 @@ export class PandopiaApiClient {
     await this.sessionStore.saveLogin(normalized, {
       email,
       userName,
+      organismeRef,
       accessToken,
       refreshToken,
       clientId,
@@ -279,6 +289,7 @@ export class PandopiaApiClient {
       server: normalized,
       email,
       userName,
+      organismeRef,
     };
   }
 
@@ -316,6 +327,22 @@ export class PandopiaApiClient {
       `/${encodeURIComponent(catalogType)}/${encodeURIComponent(objectId)}`,
       query
     );
+  }
+
+  async getHistory(
+    server: string,
+    catalogType: string,
+    objectId: string,
+    paramCode: string
+  ): Promise<CatalogParamHistoryResponse> {
+    return this.requestCatalog<CatalogParamHistoryResponse>(
+      server,
+      `/${encodeURIComponent(catalogType)}/${encodeURIComponent(objectId)}/${encodeURIComponent(paramCode)}`
+    );
+  }
+
+  async getWhoIAm(server: string): Promise<WhoIAmResponse> {
+    return this.requestAuth<WhoIAmResponse>(server, '/whoiam');
   }
 
   async logout(server: string): Promise<void> {
@@ -382,11 +409,13 @@ export class PandopiaApiClient {
     }
   }
 
-  private async promptForUserId(
+  private async promptForUser(
     payload: unknown,
     prompt: Prompt
-  ): Promise<string> {
-    const users = extractUsers(payload);
+  ): Promise<MultipleAccountUser> {
+    const users = extractUsers(payload).filter(
+      (user) => user.id !== undefined && user.id !== null
+    );
     if (users.length === 0) {
       throw new ApiError(
         extractMessage(payload, 'Multiple accounts were detected, but no account list was returned.'),
@@ -397,15 +426,14 @@ export class PandopiaApiClient {
 
     const choice = await prompt.choose(
       'Multiple Pandopia accounts found. Select the account to use:',
-      users
-        .filter((user) => user.id !== undefined && user.id !== null)
-        .map((user) => ({
-          label: formatUserChoice(user),
-          value: String(user.id),
-        }))
+      users.map((user) => ({
+        label: formatUserChoice(user),
+        value: String(user.id),
+      }))
     );
 
-    if (!choice.value) {
+    const selectedUser = users.find((user) => String(user.id) === String(choice.value));
+    if (!selectedUser) {
       throw new ApiError(
         'Pandopia returned multiple accounts, but the selected account has no userId.',
         300,
@@ -413,7 +441,7 @@ export class PandopiaApiClient {
       );
     }
 
-    return String(choice.value);
+    return selectedUser;
   }
 
   private async refreshToken(server: string): Promise<string | null> {
@@ -530,6 +558,54 @@ export class PandopiaApiClient {
     }
 
     return result.payload;
+  }
+
+  private async requestAuth<T>(server: string, path: string): Promise<T> {
+    const authState = await this.sessionStore.getAuthState(server);
+    if (!authState.accessToken) {
+      throw new AuthRequiredError();
+    }
+
+    const url = this.buildAuthUrl(authState.server, path);
+    let token = authState.accessToken;
+    let result = await this.requestJson<T>(url, {
+      method: 'GET',
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    });
+
+    if (result.response.status === 401) {
+      const refreshed = await this.refreshToken(authState.server);
+      if (!refreshed) {
+        throw new AuthRequiredError();
+      }
+
+      token = refreshed;
+      result = await this.requestJson<T>(url, {
+        method: 'GET',
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+    }
+
+    if (!result.response.ok) {
+      if (result.response.status === 401) {
+        throw new AuthRequiredError();
+      }
+      throw new ApiError(
+        extractMessage(result.payload, 'Pandopia API request failed.'),
+        result.response.status,
+        result.payload
+      );
+    }
+
+    return result.payload;
+  }
+
+  private buildAuthUrl(server: string, path: string): string {
+    return new URL(`${getAuthBaseUrl(server)}${path}`).toString();
   }
 
   private buildCatalogUrl(

@@ -1,4 +1,12 @@
-import type { CatalogParamDefinition, CatalogTypeParamsData, CatalogType, Pagination, WriterLike } from './types';
+import type {
+  CatalogParamDefinition,
+  CatalogParamHistoryEntry,
+  CatalogTypeParamsData,
+  CatalogType,
+  Pagination,
+  WhoIAmSummary,
+  WriterLike,
+} from './types';
 import type { SessionStatus } from './session';
 
 function stringifyCell(value: unknown): string {
@@ -63,21 +71,29 @@ export function renderRootHelp(status: SessionStatus): string {
     'Commands:',
     '  pandopia login [email]                      Authenticate and store credentials',
     '  pandopia logout                             Clear credentials for the active server',
+    '  pandopia whoiam                            Show the authenticated user and API key',
+    '  pandopia status                            Alias of whoiam',
     '  pandopia types                              List exposed catalog types',
     '  pandopia params <catalogType>               Show filters and params for a catalog type',
     '  pandopia list <catalogType> [flags]         List catalog objects',
+    '  pandopia find <catalogType> <text> [flags]  Alias of list --search',
     '  pandopia get <catalogType> <objectId>       Get one catalog object',
+    '  pandopia history <catalogType> <objectId> <paramCode>  Show a param history',
     '',
     'Examples:',
+    '  pandopia --version',
     '  pandopia login cyril.bele@gmail.com',
+    '  pandopia status',
     '  pandopia types',
     '  pandopia params diag_dpereglementaire',
     '  pandopia list diag_dpereglementaire --DIAG_STATUS=valide --organismeRef=lmh_6',
+    '  pandopia find diag_dpereglementaire "lmh"',
     '  pandopia get diag_dpereglementaire 1235',
+    '  pandopia history diag_dpereglementaire 1235 DIAG_STATUS',
   ].join('\n');
 }
 
-export function renderCommandUsage(command: 'list' | 'get' | 'params'): string {
+export function renderCommandUsage(command: 'list' | 'find' | 'get' | 'params' | 'history'): string {
   if (command === 'list') {
     return [
       'Usage:',
@@ -85,6 +101,19 @@ export function renderCommandUsage(command: 'list' | 'get' | 'params'): string {
       '',
       'Example:',
       '  pandopia list diag_dpereglementaire --DIAG_STATUS=valide --organismeRef=lmh_6',
+      '',
+      'Hint:',
+      '  Run pandopia types to discover available catalog types.',
+    ].join('\n');
+  }
+
+  if (command === 'find') {
+    return [
+      'Usage:',
+      '  pandopia find <catalogType> <text> [--page N] [--per-page N] [--params A,B] [filters...]',
+      '',
+      'Example:',
+      '  pandopia find diag_dpereglementaire "lmh"',
       '',
       'Hint:',
       '  Run pandopia types to discover available catalog types.',
@@ -101,6 +130,19 @@ export function renderCommandUsage(command: 'list' | 'get' | 'params'): string {
       '',
       'Hint:',
       '  Run pandopia types to discover available catalog types.',
+    ].join('\n');
+  }
+
+  if (command === 'history') {
+    return [
+      'Usage:',
+      '  pandopia history <catalogType> <objectId> <paramCode>',
+      '',
+      'Example:',
+      '  pandopia history diag_dpereglementaire 1235 DIAG_STATUS',
+      '',
+      'Hint:',
+      '  Run pandopia params <catalogType> to discover available params.',
     ].join('\n');
   }
 
@@ -165,6 +207,37 @@ export function renderParams(data: CatalogTypeParamsData): string {
 
 export function renderPagination(pagination: Pagination): string {
   return `Page ${pagination.page} / ${pagination.nbPages} | perPage ${pagination.perPage} | total ${pagination.totalNb}`;
+}
+
+export function renderHistory(entries: CatalogParamHistoryEntry[]): string {
+  if (entries.length === 0) {
+    return 'No history.';
+  }
+
+  return renderTable(
+    entries.map((entry) => ({
+      changedAt: entry.changedAt,
+      mode: entry.mode,
+      modeName: entry.modeName,
+      value: entry.value,
+      userId: entry.userId,
+      clientId: entry.clientId,
+      workId: entry.workId,
+      projectId: entry.projectId,
+      ticketId: entry.ticketId,
+    })),
+    ['changedAt', 'mode', 'modeName', 'value', 'userId', 'clientId', 'workId', 'projectId', 'ticketId']
+  );
+}
+
+export function renderWhoIAm(summary: WhoIAmSummary): string {
+  return [
+    `Connected: ${summary.connected ? 'yes' : 'no'}`,
+    `Server: ${summary.server}`,
+    `Email: ${summary.email || 'unknown'}`,
+    `Organisation: ${summary.organismeRef || 'unknown'}`,
+    `API key id: ${summary.apiKeyId || 'unknown'}`,
+  ].join('\n');
 }
 
 export function renderPrettyJson(value: unknown): string {

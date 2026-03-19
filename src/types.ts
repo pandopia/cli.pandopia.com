@@ -30,6 +30,24 @@ export interface CatalogObjectResponse {
   data: Record<string, unknown>;
 }
 
+export interface CatalogParamHistoryEntry {
+  changedAtTimestamp: number;
+  changedAt: string;
+  mode: string;
+  modeName: string;
+  value: unknown;
+  userId?: number | null;
+  clientId?: number | null;
+  workId?: number | null;
+  projectId?: number | null;
+  ticketId?: number | null;
+}
+
+export interface CatalogParamHistoryResponse {
+  status: string;
+  data: CatalogParamHistoryEntry[];
+}
+
 export interface CatalogTypesResponse {
   status: string;
   data: CatalogType[];
@@ -46,7 +64,7 @@ export interface LoginEnsureClientResponse {
   data?: {
     client_id?: string;
     client_secret?: string;
-    user?: { name?: string };
+    user?: { name?: string; organismeRef?: string };
   };
 }
 
@@ -69,6 +87,20 @@ export interface MultipleAccountUser {
   email?: string;
   organismeRef?: string;
   [key: string]: unknown;
+}
+
+export interface WhoIAmResponse {
+  status?: string;
+  data?: Record<string, unknown>;
+  [key: string]: unknown;
+}
+
+export interface WhoIAmSummary {
+  connected: boolean;
+  server: string;
+  email?: string;
+  organismeRef?: string;
+  apiKeyId?: string;
 }
 
 export interface WriterLike {

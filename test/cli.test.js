@@ -1,6 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 
+const packageJson = require('../package.json');
 const { runCli } = require('../dist/cli.js');
 const { SessionStore } = require('../dist/session.js');
 const { PandopiaApiClient } = require('../dist/api.js');
@@ -158,6 +159,9 @@ test('pandopia with no args shows help and status', async () => {
   assert.match(runtime.readStdout(), /Pandopia Catalog CLI/);
   assert.match(runtime.readStdout(), /Active server: https:\/\/app\.pandopia\.com/);
   assert.match(runtime.readStdout(), /Login status: not logged in/);
+  assert.match(runtime.readStdout(), /pandopia history <catalogType> <objectId> <paramCode>/);
+  assert.match(runtime.readStdout(), /pandopia --version/);
+  assert.match(runtime.readStdout(), /pandopia find <catalogType> <text> \[flags\]/);
 });
 
 test('missing args show usage for list, get, and params', async () => {
@@ -180,6 +184,36 @@ test('missing args show usage for list, get, and params', async () => {
     const exitCode = await runCli(['params'], runtime);
     assert.equal(exitCode, 1);
     assert.match(runtime.readStderr(), /pandopia params <catalogType>/);
+  }
+
+  {
+    const runtime = createRuntime();
+    const exitCode = await runCli(['history', 'diag_dpereglementaire'], runtime);
+    assert.equal(exitCode, 1);
+    assert.match(runtime.readStderr(), /pandopia history <catalogType> <objectId> <paramCode>/);
+  }
+
+  {
+    const runtime = createRuntime();
+    const exitCode = await runCli(['find', 'diag_dpereglementaire'], runtime);
+    assert.equal(exitCode, 1);
+    assert.match(runtime.readStderr(), /pandopia find <catalogType> <text>/);
+  }
+});
+
+test('--version and version print the package version', async () => {
+  {
+    const runtime = createRuntime();
+    const exitCode = await runCli(['--version'], runtime);
+    assert.equal(exitCode, 0);
+    assert.equal(runtime.readStdout(), `${packageJson.version}\n`);
+  }
+
+  {
+    const runtime = createRuntime();
+    const exitCode = await runCli(['version'], runtime);
+    assert.equal(exitCode, 0);
+    assert.equal(runtime.readStdout(), `${packageJson.version}\n`);
   }
 });
 
@@ -595,6 +629,39 @@ test('list forwards reserved and passthrough query params with preserved casing'
   assert.match(runtime.readStdout(), /\{"id":1235,"DIAG_STATUS":"valide","organismeRef":"lmh_6"\}/);
 });
 
+test('find aliases list with search and preserves additional filters', async () => {
+  const runtime = createRuntime({
+    fetchImpl: async (url) => {
+      assert.match(
+        url,
+        /\/api\/catalog\/diag_dpereglementaire\?organismeRef=lmh_6&search=lmh/
+      );
+      return createResponse(200, {
+        status: 'ok',
+        pagination: { page: 1, perPage: 10, nbPages: 1, totalNb: 1 },
+        data: [{ id: 1235, organismeRef: 'lmh_6', DIAG_STATUS: 'valide' }],
+      });
+    },
+  });
+
+  await runtime.sessionStore.saveLogin(DEFAULT_SERVER, {
+    email: 'admin@pandopia.com',
+    accessToken: 'access-token',
+    refreshToken: 'refresh-token',
+    clientId: 'client-id',
+    clientSecret: 'client-secret',
+  });
+
+  const exitCode = await runCli(
+    ['find', 'diag_dpereglementaire', 'lmh', '--organismeRef=lmh_6'],
+    runtime
+  );
+
+  assert.equal(exitCode, 0);
+  assert.match(runtime.readStdout(), /Page 1 \/ 1 \| perPage 10 \| total 1/);
+  assert.match(runtime.readStdout(), /\{"id":1235,"organismeRef":"lmh_6","DIAG_STATUS":"valide"\}/);
+});
+
 test('catalog commands retry on the dispatch route when the live route is misconfigured', async () => {
   const runtime = createRuntime({
     fetchImpl: async (url, init, callIndex) => {
@@ -631,6 +698,174 @@ test('catalog commands retry on the dispatch route when the live route is miscon
 
   assert.equal(exitCode, 0);
   assert.match(runtime.readStdout(), /diag_dpereglementaire/);
+});
+
+test('status reports not connected without requiring login', async () => {
+  const runtime = createRuntime();
+  const exitCode = await runCli(['status'], runtime);
+
+  assert.equal(exitCode, 0);
+  assert.match(runtime.readStdout(), /Connected: no/);
+  assert.match(runtime.readStdout(), /Email: unknown/);
+  assert.equal(runtime.readStderr(), '');
+});
+
+test('whoiam uses the auth endpoint and status is an alias', async () => {
+  const runtime = createRuntime({
+    fetchImpl: async (url, init) => {
+      if (url.endsWith('/api/auth/whoiam')) {
+        assert.equal(init.headers.Authorization, 'Bearer access-token');
+        return createResponse(200, {
+          status: 'ok',
+          data: {
+            email: 'admin@pandopia.com',
+            organismeRef: 'francehabitation',
+            clientId: 23,
+          },
+        });
+      }
+
+      throw new Error(`Unexpected URL ${url}`);
+    },
+  });
+
+  await runtime.sessionStore.saveLogin(DEFAULT_SERVER, {
+    email: 'admin@pandopia.com',
+    organismeRef: 'pandopia',
+    accessToken: 'access-token',
+    refreshToken: 'refresh-token',
+    clientId: 'client-id',
+    clientSecret: 'client-secret',
+  });
+
+  const exitCode = await runCli(['status'], runtime);
+
+  assert.equal(exitCode, 0);
+  assert.match(runtime.readStdout(), /Connected: yes/);
+  assert.match(runtime.readStdout(), /Email: admin@pandopia\.com/);
+  assert.match(runtime.readStdout(), /Organisation: francehabitation/);
+  assert.match(runtime.readStdout(), /API key id: 23/);
+});
+
+test('whoiam falls back to the local session when the backend route is unavailable', async () => {
+  const runtime = createRuntime({
+    fetchImpl: async (url, init) => {
+      if (url.endsWith('/api/auth/whoiam')) {
+        assert.equal(init.headers.Authorization, 'Bearer access-token');
+        return createResponse(400, {
+          status: 'KO',
+          error: {
+            message: 'Action "whoiam" does not exist and was not trapped in __call()',
+          },
+        });
+      }
+
+      throw new Error(`Unexpected URL ${url}`);
+    },
+  });
+
+  await runtime.sessionStore.saveLogin(DEFAULT_SERVER, {
+    email: 'admin@pandopia.com',
+    organismeRef: 'francehabitation',
+    accessToken: 'access-token',
+    refreshToken: 'refresh-token',
+    clientId: 'client-id',
+    clientSecret: 'client-secret',
+  });
+
+  const exitCode = await runCli(['whoiam'], runtime);
+
+  assert.equal(exitCode, 0);
+  assert.match(runtime.readStdout(), /Connected: yes/);
+  assert.match(runtime.readStdout(), /Email: admin@pandopia\.com/);
+  assert.match(runtime.readStdout(), /Organisation: francehabitation/);
+  assert.match(runtime.readStdout(), /API key id: client-id/);
+  assert.equal(runtime.readStderr(), '');
+});
+
+test('history maps to the catalog history endpoint and supports json output', async () => {
+  {
+    const runtime = createRuntime({
+      fetchImpl: async (url) => {
+        if (url.endsWith('/api/catalog/diag_dpereglementaire/1235/DIAG_STATUS')) {
+          return createResponse(200, {
+            status: 'ok',
+            data: [
+              {
+                changedAtTimestamp: 1710835200,
+                changedAt: '2024-03-19T10:00:00+01:00',
+                mode: 'm',
+                modeName: 'manuel',
+                value: 'valide',
+                userId: 42,
+                clientId: 23,
+              },
+            ],
+          });
+        }
+
+        throw new Error(`Unexpected URL ${url}`);
+      },
+    });
+
+    await runtime.sessionStore.saveLogin(DEFAULT_SERVER, {
+      email: 'admin@pandopia.com',
+      accessToken: 'access-token',
+      refreshToken: 'refresh-token',
+      clientId: 'client-id',
+      clientSecret: 'client-secret',
+    });
+
+    const exitCode = await runCli(
+      ['history', 'diag_dpereglementaire', '1235', 'DIAG_STATUS'],
+      runtime
+    );
+
+    assert.equal(exitCode, 0);
+    assert.match(runtime.readStdout(), /2024-03-19T10:00:00\+01:00/);
+    assert.match(runtime.readStdout(), /manuel/);
+    assert.match(runtime.readStdout(), /valide/);
+  }
+
+  {
+    const runtime = createRuntime({
+      fetchImpl: async (url) => {
+        if (url.endsWith('/api/catalog/diag_dpereglementaire/1235/DIAG_STATUS')) {
+          return createResponse(200, {
+            status: 'ok',
+            data: [
+              {
+                changedAtTimestamp: 1710835200,
+                changedAt: '2024-03-19T10:00:00+01:00',
+                mode: 'm',
+                modeName: 'manuel',
+                value: 'valide',
+              },
+            ],
+          });
+        }
+
+        throw new Error(`Unexpected URL ${url}`);
+      },
+    });
+
+    await runtime.sessionStore.saveLogin(DEFAULT_SERVER, {
+      email: 'admin@pandopia.com',
+      accessToken: 'access-token',
+      refreshToken: 'refresh-token',
+      clientId: 'client-id',
+      clientSecret: 'client-secret',
+    });
+
+    const exitCode = await runCli(
+      ['history', 'diag_dpereglementaire', '1235', 'DIAG_STATUS', '--json'],
+      runtime
+    );
+
+    assert.equal(exitCode, 0);
+    assert.match(runtime.readStdout(), /"status": "ok"/);
+    assert.match(runtime.readStdout(), /"modeName": "manuel"/);
+  }
 });
 
 test('params and get support readable output and json output', async () => {

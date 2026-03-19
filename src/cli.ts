@@ -1,20 +1,23 @@
-import type { WriterLike } from './types';
+import type { WhoIAmResponse, WhoIAmSummary, WriterLike } from './types';
 import { FileConfigStore } from './config';
 import { MacKeychainStore } from './secrets';
-import { SessionStore } from './session';
+import { SessionStore, type SessionAuthState } from './session';
 import { TerminalPrompt, type Prompt } from './prompt';
 import { PandopiaApiClient, ApiError, AuthRequiredError, type FetchLike } from './api';
 import { normalizeServerInput } from './servers';
 import {
   renderCommandUsage,
+  renderHistory,
   renderJsonLines,
   renderPagination,
   renderParams,
   renderPrettyJson,
   renderRootHelp,
   renderTypes,
+  renderWhoIAm,
   writeLine,
 } from './format';
+import { getCliVersion } from './version';
 
 interface ParsedArguments {
   positionals: string[];
@@ -31,7 +34,7 @@ export interface CliDependencies {
 }
 
 function isReservedFlag(name: string): boolean {
-  return ['json', 'server', 'page', 'per-page', 'search', 'params'].includes(
+  return ['json', 'server', 'page', 'per-page', 'search', 'params', 'version'].includes(
     name.toLowerCase()
   );
 }
@@ -154,6 +157,74 @@ export function createRuntimeDependencies(): CliDependencies {
   };
 }
 
+function asRecord(value: unknown): Record<string, unknown> | null {
+  if (!value || typeof value !== 'object') {
+    return null;
+  }
+  return value as Record<string, unknown>;
+}
+
+function findFirstScalar(
+  value: unknown,
+  keys: string[],
+  depth = 0,
+  seen = new Set<unknown>()
+): string | undefined {
+  const record = asRecord(value);
+  if (!record || depth > 4 || seen.has(record)) {
+    return undefined;
+  }
+
+  seen.add(record);
+
+  for (const key of keys) {
+    const candidate = record[key];
+    if (typeof candidate === 'string' && candidate.trim() !== '') {
+      return candidate.trim();
+    }
+    if (typeof candidate === 'number' && Number.isFinite(candidate)) {
+      return String(candidate);
+    }
+  }
+
+  for (const nested of Object.values(record)) {
+    const found = findFirstScalar(nested, keys, depth + 1, seen);
+    if (found) {
+      return found;
+    }
+  }
+
+  return undefined;
+}
+
+function buildWhoIAmSummary(input: {
+  connected: boolean;
+  server: string;
+  authState: SessionAuthState;
+  payload?: WhoIAmResponse;
+}): WhoIAmSummary {
+  return {
+    connected: input.connected,
+    server: normalizeServerInput(input.server),
+    email:
+      findFirstScalar(input.payload, ['email', 'mail']) || input.authState.email,
+    organismeRef:
+      findFirstScalar(input.payload, [
+        'organismeRef',
+        'organisationRef',
+        'organizationRef',
+        'orgaRef',
+      ]) || input.authState.organismeRef,
+    apiKeyId:
+      findFirstScalar(input.payload, [
+        'clientId',
+        'client_id',
+        'apiKeyId',
+        'api_key_id',
+      ]) || input.authState.clientId || undefined,
+  };
+}
+
 function isInvalidLoginError(error: unknown): boolean {
   if (!(error instanceof ApiError)) {
     return false;
@@ -178,6 +249,18 @@ function isInvalidLoginError(error: unknown): boolean {
     'adresse email',
     'username or password',
   ].some((snippet) => message.includes(snippet));
+}
+
+function isMissingWhoIAmRouteError(error: unknown): boolean {
+  if (!(error instanceof ApiError)) {
+    return false;
+  }
+
+  const message = error.message.toLowerCase();
+  return (
+    message.includes('action "whoiam" does not exist') ||
+    message.includes('does not exist and was not trapped in __call()')
+  );
 }
 
 async function runLogin(
@@ -218,6 +301,42 @@ async function runTypes(
   writeLine(
     deps.stdout,
     shouldRenderJson(parsed) ? renderPrettyJson(payload) : renderTypes(payload.data)
+  );
+  return 0;
+}
+
+async function runWhoIAm(
+  parsed: ParsedArguments,
+  deps: CliDependencies
+): Promise<number> {
+  const server = await resolveServer(parsed, deps.sessionStore);
+  const authState = await deps.sessionStore.getAuthState(server);
+  let connected = !!authState.accessToken;
+  let payload: WhoIAmResponse | undefined;
+
+  if (connected) {
+    try {
+      payload = await deps.apiClient.getWhoIAm(server);
+    } catch (error) {
+      if (error instanceof AuthRequiredError) {
+        connected = false;
+      } else if (isMissingWhoIAmRouteError(error)) {
+        payload = undefined;
+      } else {
+        throw error;
+      }
+    }
+  }
+
+  const summary = buildWhoIAmSummary({
+    connected,
+    server,
+    authState,
+    payload,
+  });
+  writeLine(
+    deps.stdout,
+    shouldRenderJson(parsed) ? renderPrettyJson(payload || summary) : renderWhoIAm(summary)
   );
   return 0;
 }
@@ -269,6 +388,29 @@ async function runList(
   return 0;
 }
 
+async function runFind(
+  parsed: ParsedArguments,
+  deps: CliDependencies
+): Promise<number> {
+  const catalogType = parsed.positionals[1];
+  const searchText = parsed.positionals[2];
+  if (!catalogType || !searchText) {
+    writeLine(deps.stderr, renderCommandUsage('find'));
+    return 1;
+  }
+
+  return runList(
+    {
+      ...parsed,
+      reserved: {
+        ...parsed.reserved,
+        search: searchText,
+      },
+    },
+    deps
+  );
+}
+
 async function runGet(
   parsed: ParsedArguments,
   deps: CliDependencies
@@ -290,6 +432,32 @@ async function runGet(
   writeLine(
     deps.stdout,
     shouldRenderJson(parsed) ? renderPrettyJson(payload) : renderPrettyJson(payload.data)
+  );
+  return 0;
+}
+
+async function runHistory(
+  parsed: ParsedArguments,
+  deps: CliDependencies
+): Promise<number> {
+  const catalogType = parsed.positionals[1];
+  const objectId = parsed.positionals[2];
+  const paramCode = parsed.positionals[3];
+  if (!catalogType || !objectId || !paramCode) {
+    writeLine(deps.stderr, renderCommandUsage('history'));
+    return 1;
+  }
+
+  const server = await resolveServer(parsed, deps.sessionStore);
+  const payload = await deps.apiClient.getHistory(
+    server,
+    catalogType,
+    objectId,
+    paramCode
+  );
+  writeLine(
+    deps.stdout,
+    shouldRenderJson(parsed) ? renderPrettyJson(payload) : renderHistory(payload.data)
   );
   return 0;
 }
@@ -326,6 +494,11 @@ export async function runCli(
   const command = parsed.positionals[0];
 
   try {
+    if (parsed.reserved.version === true || parsed.reserved.version === 'true') {
+      writeLine(deps.stdout, await getCliVersion());
+      return 0;
+    }
+
     if (!command) {
       const status = await deps.sessionStore.getStatus(
         typeof parsed.reserved.server === 'string'
@@ -341,14 +514,25 @@ export async function runCli(
                 return await runLogin(parsed, deps);
             case 'logout':
                 return await runLogout(parsed, deps);
+            case 'whoiam':
+            case 'whoami':
+            case 'status':
+                return await runWhoIAm(parsed, deps);
             case 'types':
                 return await runTypes(parsed, deps);
             case 'params':
                 return await runParams(parsed, deps);
             case 'list':
                 return await runList(parsed, deps);
+            case 'find':
+                return await runFind(parsed, deps);
             case 'get':
                 return await runGet(parsed, deps);
+            case 'history':
+                return await runHistory(parsed, deps);
+            case 'version':
+                writeLine(deps.stdout, await getCliVersion());
+                return 0;
             default:
                 writeLine(deps.stderr, `Unknown command: ${command}`);
                 writeLine(deps.stderr);
