@@ -79,6 +79,14 @@ function extractMessage(payload: unknown, fallback: string): string {
   return fallback;
 }
 
+function isCatalogRouteError(payload: unknown): boolean {
+  const message = extractMessage(payload, '');
+  return (
+    message.includes('does not exist and was not trapped in __call()') ||
+    message.includes('Invalid controller specified (catalog)')
+  );
+}
+
 function extractUsers(payload: unknown): MultipleAccountUser[] {
   if (!payload || typeof payload !== 'object') {
     return [];
@@ -106,10 +114,33 @@ function extractRefreshToken(payload: AccessTokenResponse): string | undefined {
   return payload.refresh_token || payload.data?.refresh_token;
 }
 
+function looksLikeEmail(value: string): boolean {
+  return value.includes('@');
+}
+
 function formatUserChoice(user: MultipleAccountUser): string {
-  const parts = [user.name, user.email, user.organismeRef]
-    .filter((value) => typeof value === 'string' && value.trim() !== '')
-    .map((value) => String(value));
+  const parts: string[] = [];
+  const organismeRef =
+    typeof user.organismeRef === 'string' ? user.organismeRef.trim() : '';
+  const name = typeof user.name === 'string' ? user.name.trim() : '';
+  const email = typeof user.email === 'string' ? user.email.trim() : '';
+
+  if (organismeRef) {
+    parts.push(organismeRef);
+  }
+
+  if (name && !looksLikeEmail(name) && name !== organismeRef) {
+    parts.push(name);
+  }
+
+  if (parts.length === 0) {
+    if (name) {
+      parts.push(name);
+    }
+    if (email && email !== name) {
+      parts.push(email);
+    }
+  }
 
   if (user.id !== undefined) {
     parts.push(`id=${user.id}`);
@@ -435,20 +466,30 @@ export class PandopiaApiClient {
       throw new AuthRequiredError();
     }
 
-    const url = new URL(`${getCatalogBaseUrl(authState.server)}${path}`);
-    for (const [key, values] of Object.entries(query || {})) {
-      for (const value of values) {
-        url.searchParams.append(key, value);
-      }
-    }
+    const urls = [
+      this.buildCatalogUrl(authState.server, path, query),
+      this.buildCatalogUrl(authState.server, `/dispatch${path}`, query),
+    ];
 
     let token = authState.accessToken;
-    let result = await this.requestJson<T>(url.toString(), {
+    let result = await this.requestJson<T>(urls[0], {
       method: 'GET',
       headers: {
         Authorization: `Bearer ${token}`,
       },
     });
+
+    if (
+      result.response.status === 400 &&
+      isCatalogRouteError(result.payload)
+    ) {
+      result = await this.requestJson<T>(urls[1], {
+        method: 'GET',
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+    }
 
     if (result.response.status === 401) {
       const refreshed = await this.refreshToken(authState.server);
@@ -457,12 +498,24 @@ export class PandopiaApiClient {
       }
 
       token = refreshed;
-      result = await this.requestJson<T>(url.toString(), {
+      result = await this.requestJson<T>(urls[0], {
         method: 'GET',
         headers: {
           Authorization: `Bearer ${token}`,
         },
       });
+
+      if (
+        result.response.status === 400 &&
+        isCatalogRouteError(result.payload)
+      ) {
+        result = await this.requestJson<T>(urls[1], {
+          method: 'GET',
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        });
+      }
     }
 
     if (!result.response.ok) {
@@ -477,6 +530,20 @@ export class PandopiaApiClient {
     }
 
     return result.payload;
+  }
+
+  private buildCatalogUrl(
+    server: string,
+    path: string,
+    query?: Record<string, string[]>
+  ): string {
+    const url = new URL(`${getCatalogBaseUrl(server)}${path}`);
+    for (const [key, values] of Object.entries(query || {})) {
+      for (const value of values) {
+        url.searchParams.append(key, value);
+      }
+    }
+    return url.toString();
   }
 
   private async requestJson<T>(

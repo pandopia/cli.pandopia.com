@@ -13,7 +13,12 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "prepare": "npm run build",
-    "test": "npm run build && node --test"
+    "test:unit": "npm run build && node --test",
+    "test:coverage": "npm run build && node scripts/check-coverage.mjs",
+    "test": "npm run test:coverage"
+  },
+  "coverageThreshold": {
+    "lines": 80
   },
   "engines": {
     "node": ">=20"

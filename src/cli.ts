@@ -7,6 +7,7 @@ import { PandopiaApiClient, ApiError, AuthRequiredError, type FetchLike } from '
 import { normalizeServerInput } from './servers';
 import {
   renderCommandUsage,
+  renderJsonLines,
   renderPagination,
   renderParams,
   renderPrettyJson,
@@ -153,6 +154,32 @@ export function createRuntimeDependencies(): CliDependencies {
   };
 }
 
+function isInvalidLoginError(error: unknown): boolean {
+  if (!(error instanceof ApiError)) {
+    return false;
+  }
+
+  const message = error.message.toLowerCase();
+  if (error.status === 401) {
+    return true;
+  }
+
+  return [
+    'incorrect',
+    'invalid credentials',
+    'invalid password',
+    'invalid username',
+    'email or password',
+    'email/password',
+    'wrong password',
+    'bad credentials',
+    'mot de passe',
+    'identifiant',
+    'adresse email',
+    'username or password',
+  ].some((snippet) => message.includes(snippet));
+}
+
 async function runLogin(
   parsed: ParsedArguments,
   deps: CliDependencies
@@ -161,13 +188,25 @@ async function runLogin(
   const providedEmail = parsed.positionals[1];
   const email =
     providedEmail || (await deps.prompt.ask('Email: '));
-  const password = await deps.prompt.askHidden('Password: ');
-  const result = await deps.apiClient.login(server, email, password, deps.prompt);
-  writeLine(
-    deps.stdout,
-    `Logged in on ${result.server}${result.userName ? ` as ${result.userName}` : ''}.`
-  );
-  return 0;
+
+  while (true) {
+    const password = await deps.prompt.askHidden('Password: ');
+
+    try {
+      const result = await deps.apiClient.login(server, email, password, deps.prompt);
+      writeLine(
+        deps.stdout,
+        `Logged in on ${result.server}${result.userName ? ` as ${result.userName}` : ''}.`
+      );
+      return 0;
+    } catch (error) {
+      if (isInvalidLoginError(error)) {
+        writeLine(deps.stderr, `${(error as ApiError).message}. Re-enter password or press Ctrl+C to cancel.`);
+        continue;
+      }
+      throw error;
+    }
+  }
 }
 
 async function runTypes(
@@ -226,7 +265,7 @@ async function runList(
 
   writeLine(deps.stdout, renderPagination(payload.pagination));
   writeLine(deps.stdout);
-  writeLine(deps.stdout, renderPrettyJson(payload.data));
+  writeLine(deps.stdout, renderJsonLines(payload.data));
   return 0;
 }
 

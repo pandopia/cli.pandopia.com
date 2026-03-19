@@ -63,6 +63,8 @@ class MockPrompt {
     this.answers = [...answers];
     this.hiddenAnswers = [...hiddenAnswers];
     this.choices = [...choices];
+    this.lastQuestion = null;
+    this.lastOptions = null;
   }
 
   async ask() {
@@ -74,6 +76,8 @@ class MockPrompt {
   }
 
   async choose(_question, options) {
+    this.lastQuestion = _question;
+    this.lastOptions = options;
     const selected = this.choices.shift();
     if (selected === undefined) {
       return options[0];
@@ -237,6 +241,59 @@ test('login stores credentials after loginensureclient and accesstoken', async (
   assert.match(runtime.readStdout(), /Logged in on https:\/\/app\.pandopia\.com as Cyril Bele/);
 });
 
+test('login re-prompts for password when credentials are incorrect', async () => {
+  const runtime = createRuntime({
+    prompt: new MockPrompt({
+      hiddenAnswers: ['wrong-password', 'secret-password'],
+    }),
+    fetchImpl: async (url, init, callIndex) => {
+      if (url.endsWith('/api/auth/loginensureclient') && callIndex === 0) {
+        assert.match(init.body, /password=wrong-password/);
+        return createResponse(401, {
+          status: 'KO',
+          error: {
+            message: 'Email or password incorrect',
+          },
+        });
+      }
+
+      if (url.endsWith('/api/auth/loginensureclient') && callIndex === 1) {
+        assert.match(init.body, /password=secret-password/);
+        return createResponse(200, {
+          status: 'OK',
+          data: {
+            client_id: 'client-id',
+            client_secret: 'client-secret',
+            user: { name: 'Cyril Bele' },
+          },
+        });
+      }
+
+      if (url.endsWith('/api/auth/accesstoken') && callIndex === 2) {
+        assert.match(init.body, /password=secret-password/);
+        return createResponse(200, {
+          access_token: 'access-token',
+          refresh_token: 'refresh-token',
+        });
+      }
+
+      throw new Error(`Unexpected URL ${url}`);
+    },
+  });
+
+  const exitCode = await runCli(['login', 'cyril.bele@gmail.com'], runtime);
+
+  assert.equal(exitCode, 0);
+  assert.equal(
+    await runtime.secrets.get(DEFAULT_SERVER, 'access_token'),
+    'access-token'
+  );
+  assert.match(
+    runtime.readStderr(),
+    /Email or password incorrect\. Re-enter password or press Ctrl\+C to cancel\./
+  );
+});
+
 test('login retries with selected userId on multiple accounts', async () => {
   const runtime = createRuntime({
     prompt: new MockPrompt({
@@ -345,6 +402,68 @@ test('login retries loginensureclient with selected userId on multiple accounts'
     'access-token'
   );
   assert.match(runtime.readStdout(), /Logged in on https:\/\/app\.pandopia\.com as Account B/);
+});
+
+test('multiple account prompt omits the repeated email from account labels', async () => {
+  const prompt = new MockPrompt({
+    hiddenAnswers: ['secret-password'],
+    choices: ['23'],
+  });
+  const runtime = createRuntime({
+    prompt,
+    fetchImpl: async (url, init, callIndex) => {
+      if (url.endsWith('/api/auth/loginensureclient') && callIndex === 0) {
+        return createResponse(300, {
+          status: 'KO',
+          error: { code: 300, message: 'MultipleAccounts' },
+          users: [
+            {
+              id: '1',
+              name: 'admin@pandopia.com',
+              email: 'admin@pandopia.com',
+              organismeRef: 'pandopia',
+            },
+            {
+              id: '23',
+              name: 'admin@pandopia.com',
+              email: 'admin@pandopia.com',
+              organismeRef: 'francehabitation',
+            },
+          ],
+        });
+      }
+
+      if (url.endsWith('/api/auth/loginensureclient') && callIndex === 1) {
+        assert.match(init.body, /userId=23/);
+        return createResponse(200, {
+          status: 'OK',
+          data: {
+            client_id: 'client-id',
+            client_secret: 'client-secret',
+            user: { name: 'Admin Application' },
+          },
+        });
+      }
+
+      if (url.endsWith('/api/auth/accesstoken') && callIndex === 2) {
+        assert.match(init.body, /userId=23/);
+        return createResponse(200, {
+          access_token: 'access-token',
+          refresh_token: 'refresh-token',
+        });
+      }
+
+      throw new Error(`Unexpected URL ${url}`);
+    },
+  });
+
+  const exitCode = await runCli(['login', 'admin@pandopia.com'], runtime);
+
+  assert.equal(exitCode, 0);
+  assert.deepEqual(
+    prompt.lastOptions.map((option) => option.label),
+    ['pandopia | id=1', 'francehabitation | id=23']
+  );
 });
 
 test('401 on catalog request refreshes token once and retries', async () => {
@@ -473,7 +592,45 @@ test('list forwards reserved and passthrough query params with preserved casing'
 
   assert.equal(exitCode, 0);
   assert.match(runtime.readStdout(), /Page 2 \/ 3 \| perPage 5 \| total 12/);
-  assert.match(runtime.readStdout(), /"DIAG_STATUS": "valide"/);
+  assert.match(runtime.readStdout(), /\{"id":1235,"DIAG_STATUS":"valide","organismeRef":"lmh_6"\}/);
+});
+
+test('catalog commands retry on the dispatch route when the live route is misconfigured', async () => {
+  const runtime = createRuntime({
+    fetchImpl: async (url, init, callIndex) => {
+      if (url.endsWith('/api/catalog/types') && callIndex === 0) {
+        return createResponse(400, {
+          status: 'KO',
+          error: {
+            message: 'Action "types" does not exist and was not trapped in __call()',
+          },
+        });
+      }
+
+      if (url.endsWith('/api/catalog/dispatch/types') && callIndex === 1) {
+        assert.equal(init.headers.Authorization, 'Bearer access-token');
+        return createResponse(200, {
+          status: 'ok',
+          data: [{ type: 'diag_dpereglementaire', objectName: 'Diagnostic DPE' }],
+        });
+      }
+
+      throw new Error(`Unexpected URL ${url}`);
+    },
+  });
+
+  await runtime.sessionStore.saveLogin(DEFAULT_SERVER, {
+    email: 'cyril.bele@gmail.com',
+    accessToken: 'access-token',
+    refreshToken: 'refresh-token',
+    clientId: 'client-id',
+    clientSecret: 'client-secret',
+  });
+
+  const exitCode = await runCli(['types'], runtime);
+
+  assert.equal(exitCode, 0);
+  assert.match(runtime.readStdout(), /diag_dpereglementaire/);
 });
 
 test('params and get support readable output and json output', async () => {

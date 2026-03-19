@@ -17,6 +17,16 @@ export interface SecretStore {
   delete(server: string, key: SecretKey): Promise<void>;
 }
 
+interface ExecFileResult {
+  stdout: string;
+  stderr?: string;
+}
+
+type ExecFileRunner = (
+  file: string,
+  args: string[]
+) => Promise<ExecFileResult>;
+
 function accountName(server: string, key: SecretKey): string {
   return `${normalizeServerInput(server)}::${key}`;
 }
@@ -32,15 +42,18 @@ function isMissingSecret(error: unknown): boolean {
 }
 
 export class MacKeychainStore implements SecretStore {
-  constructor() {
-    if (process.platform !== 'darwin') {
+  constructor(
+    private readonly execFileRunner: ExecFileRunner = execFileAsync,
+    platform = process.platform
+  ) {
+    if (platform !== 'darwin') {
       throw new Error('Pandopia CLI keychain storage is only supported on macOS.');
     }
   }
 
   async get(server: string, key: SecretKey): Promise<string | null> {
     try {
-      const result = await execFileAsync('/usr/bin/security', [
+      const result = await this.execFileRunner('/usr/bin/security', [
         'find-generic-password',
         '-a',
         accountName(server, key),
@@ -58,7 +71,7 @@ export class MacKeychainStore implements SecretStore {
   }
 
   async set(server: string, key: SecretKey, value: string): Promise<void> {
-    await execFileAsync('/usr/bin/security', [
+    await this.execFileRunner('/usr/bin/security', [
       'add-generic-password',
       '-a',
       accountName(server, key),
@@ -72,7 +85,7 @@ export class MacKeychainStore implements SecretStore {
 
   async delete(server: string, key: SecretKey): Promise<void> {
     try {
-      await execFileAsync('/usr/bin/security', [
+      await this.execFileRunner('/usr/bin/security', [
         'delete-generic-password',
         '-a',
         accountName(server, key),

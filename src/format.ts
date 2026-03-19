@@ -171,6 +171,16 @@ export function renderPrettyJson(value: unknown): string {
   return JSON.stringify(value, null, 2);
 }
 
+export function renderJsonLines(
+  rows: Array<Record<string, unknown>>
+): string {
+  if (rows.length === 0) {
+    return 'No results.';
+  }
+
+  return rows.map((row) => JSON.stringify(row)).join('\n');
+}
+
 export function writeLine(writer: WriterLike, message = ''): void {
   writer.write(`${message}\n`);
 }
