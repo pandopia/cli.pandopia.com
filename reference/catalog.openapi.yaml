@@ -1,0 +1,526 @@
+openapi: 3.0.3
+info:
+  title: Pandopia Catalog API
+  version: 1.0.0
+  description: >
+    API de lecture du catalogue Pandopia. Les types exposés sont découvrables via
+    /types. Les filtres métier disponibles pour un type donné sont découvrables via
+    /{catalogType}/params.
+servers:
+  - url: https://app.pandopia.com/api/catalog
+  - url: https://test.pandopia.com/api/catalog
+  - url: https://pandopia.test/api/catalog
+tags:
+  - name: catalog
+    description: Consultation du catalogue
+components:
+  securitySchemes:
+    oauthSecurity:
+      type: oauth2
+      flows:
+        password:
+          tokenUrl: /api/auth/accesstoken
+  schemas:
+    ApiError:
+      type: object
+      required:
+        - code
+        - message
+      properties:
+        code:
+          type: integer
+          example: 401
+        message:
+          type: string
+          example: not authenticated
+    ApiErrorResponse:
+      type: object
+      required:
+        - status
+        - error
+      properties:
+        status:
+          type: string
+          enum: [ko]
+        error:
+          $ref: '#/components/schemas/ApiError'
+    Pagination:
+      type: object
+      required:
+        - page
+        - perPage
+        - nbPages
+        - totalNb
+      properties:
+        page:
+          type: integer
+          minimum: 1
+          example: 1
+        perPage:
+          type: integer
+          minimum: 1
+          maximum: 100
+          example: 10
+        nbPages:
+          type: integer
+          minimum: 0
+          example: 42
+        totalNb:
+          type: integer
+          minimum: 0
+          example: 420
+    CatalogType:
+      type: object
+      required:
+        - type
+        - objectName
+      properties:
+        type:
+          type: string
+          example: diag_dpereglementaire
+        objectName:
+          type: string
+          example: Diagnostic DPE réglementaire
+    CatalogTypeListResponse:
+      type: object
+      required:
+        - status
+        - data
+      properties:
+        status:
+          type: string
+          enum: [ok]
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/CatalogType'
+    CatalogParamDefinition:
+      type: object
+      description: Définition de paramètre telle qu'exposée par l'API Pandopia.
+      additionalProperties: true
+      example:
+        code: DIAG_STATUS
+        name: Statut
+        type: list
+    CatalogParamDefinitionResponse:
+      type: object
+      required:
+        - status
+        - data
+      properties:
+        status:
+          type: string
+          enum: [ok]
+        data:
+          $ref: '#/components/schemas/CatalogParamDefinition'
+    CatalogTypeParamsResponseData:
+      type: object
+      required:
+        - filters
+        - params
+      properties:
+        filters:
+          type: array
+          items:
+            type: string
+        params:
+          type: array
+          items:
+            $ref: '#/components/schemas/CatalogParamDefinition'
+    CatalogTypeParamsResponse:
+      type: object
+      required:
+        - status
+        - data
+      properties:
+        status:
+          type: string
+          enum: [ok]
+        data:
+          $ref: '#/components/schemas/CatalogTypeParamsResponseData'
+    CatalogObject:
+      type: object
+      description: >
+        Objet catalogue sérialisé. Les clés dépendent du type demandé. Quand
+        paramsList est fourni, seules id et les clés demandées sont renvoyées.
+      additionalProperties: true
+      example:
+        id: 2208356
+        DIAG_STATUS: avalider
+        DIAG_DPE_ETIQUETTEDPE: d
+    CatalogObjectResponse:
+      type: object
+      required:
+        - status
+        - data
+      properties:
+        status:
+          type: string
+          enum: [ok]
+        data:
+          $ref: '#/components/schemas/CatalogObject'
+    CatalogObjectListResponse:
+      type: object
+      required:
+        - status
+        - pagination
+        - data
+      properties:
+        status:
+          type: string
+          enum: [ok]
+        pagination:
+          $ref: '#/components/schemas/Pagination'
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/CatalogObject'
+    CatalogParamHistoryEntry:
+      type: object
+      required:
+        - changedAtTimestamp
+        - changedAt
+        - mode
+        - modeName
+        - value
+      properties:
+        changedAtTimestamp:
+          type: integer
+          example: 1633959092
+        changedAt:
+          type: string
+          format: date-time
+          example: '2021-10-11T15:31:32+02:00'
+        mode:
+          type: string
+          example: a
+        modeName:
+          type: string
+          example: par défaut
+        value:
+          nullable: true
+        userId:
+          type: integer
+          nullable: true
+        clientId:
+          type: integer
+          nullable: true
+        workId:
+          type: integer
+          nullable: true
+        projectId:
+          type: integer
+          nullable: true
+        ticketId:
+          type: integer
+          nullable: true
+    CatalogParamHistoryResponse:
+      type: object
+      required:
+        - status
+        - data
+      properties:
+        status:
+          type: string
+          enum: [ok]
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/CatalogParamHistoryEntry'
+    MarkdownDocument:
+      type: object
+      required:
+        - markdown
+      properties:
+        markdown:
+          type: string
+          example: |-
+            - `/types` : Liste les types de catalogue exposés
+            - `/{catalogType}` : Liste paginée des objets d'un type de catalogue
+    CatalogMarkdownResponse:
+      type: object
+      required:
+        - status
+        - data
+      properties:
+        status:
+          type: string
+          enum: [ok]
+        data:
+          $ref: '#/components/schemas/MarkdownDocument'
+paths:
+  /:
+    get:
+      tags: [catalog]
+      summary: Résumé markdown rapide des endpoints du service catalogue
+      security:
+        - oauthSecurity: []
+      responses:
+        '200':
+          description: Documentation rapide du service
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CatalogMarkdownResponse'
+        '401':
+          description: Authentification requise
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+  /openapi:
+    get:
+      tags: [catalog]
+      summary: Retourne la définition OpenAPI du service catalogue au format YAML
+      security: []
+      responses:
+        '200':
+          description: Définition OpenAPI YAML
+          content:
+            application/yaml:
+              schema:
+                type: string
+  /types:
+    get:
+      tags: [catalog]
+      summary: Liste les types de catalogue exposés
+      security:
+        - oauthSecurity: []
+      responses:
+        '200':
+          description: Types exposés
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CatalogTypeListResponse'
+        '401':
+          description: Authentification requise
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+  /param/{paramCode}:
+    get:
+      tags: [catalog]
+      summary: Détail d'un paramètre
+      security:
+        - oauthSecurity: []
+      parameters:
+        - name: paramCode
+          in: path
+          required: true
+          schema:
+            type: string
+          example: DIAG_STATUS
+      responses:
+        '200':
+          description: Définition du paramètre
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CatalogParamDefinitionResponse'
+        '400':
+          description: Paramètre inconnu ou invalide
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+        '401':
+          description: Authentification requise
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+  /{catalogType}:
+    get:
+      tags: [catalog]
+      summary: Liste paginée des objets d'un type de catalogue
+      description: >
+        Les filtres métier propres à un type sont découvrables via
+        /{catalogType}/params. Quand paramsList est fourni, seules id et les
+        clés demandées sont renvoyées.
+      security:
+        - oauthSecurity: []
+      parameters:
+        - name: catalogType
+          in: path
+          required: true
+          schema:
+            type: string
+          example: diag_dpereglementaire
+        - name: page
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 999999
+            default: 1
+        - name: perPage
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 10
+        - name: search
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: organismeRef
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: paramsList
+          in: query
+          required: false
+          description: Liste de codes paramètres séparés par des virgules
+          schema:
+            type: string
+          example: DIAG_STATUS,DIAG_DPE_ETIQUETTEDPE
+      responses:
+        '200':
+          description: Liste paginée d'objets
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CatalogObjectListResponse'
+        '400':
+          description: Type inconnu, paramètres invalides ou requête invalide
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+        '401':
+          description: Authentification requise
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+  /{catalogType}/params:
+    get:
+      tags: [catalog]
+      summary: Décrit les filtres et paramètres disponibles pour un type
+      security:
+        - oauthSecurity: []
+      parameters:
+        - name: catalogType
+          in: path
+          required: true
+          schema:
+            type: string
+          example: diag_dpereglementaire
+      responses:
+        '200':
+          description: Filtres et paramètres disponibles
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CatalogTypeParamsResponse'
+        '400':
+          description: Type inconnu ou requête invalide
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+        '401':
+          description: Authentification requise
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+  /{catalogType}/{objectId}:
+    get:
+      tags: [catalog]
+      summary: Détail d'un objet du catalogue
+      description: >
+        Quand paramsList est fourni, seules id et les clés demandées sont
+        renvoyées.
+      security:
+        - oauthSecurity: []
+      parameters:
+        - name: catalogType
+          in: path
+          required: true
+          schema:
+            type: string
+          example: diag_dpereglementaire
+        - name: objectId
+          in: path
+          required: true
+          schema:
+            type: integer
+          example: 316744
+        - name: paramsList
+          in: query
+          required: false
+          description: Liste de codes paramètres séparés par des virgules
+          schema:
+            type: string
+          example: DIAG_STATUS,DIAG_DPE_ETIQUETTEDPE
+      responses:
+        '200':
+          description: Objet catalogue
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CatalogObjectResponse'
+        '400':
+          description: Type, identifiant ou paramètres invalides
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+        '401':
+          description: Authentification requise
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+  /{catalogType}/{objectId}/{paramCode}:
+    get:
+      tags: [catalog]
+      summary: Historique de valeur d'un paramètre pour un objet
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: catalogType
+          in: path
+          required: true
+          schema:
+            type: string
+          example: diag_dpereglementaire
+        - name: objectId
+          in: path
+          required: true
+          schema:
+            type: integer
+          example: 316744
+        - name: paramCode
+          in: path
+          required: true
+          schema:
+            type: string
+          example: DIAG_STATUS
+      responses:
+        '200':
+          description: Historique du paramètre
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CatalogParamHistoryResponse'
+        '400':
+          description: Type, identifiant ou paramètre invalide
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+        '401':
+          description: Authentification requise
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
