@@ -18,7 +18,7 @@
     "test": "npm run test:coverage"
   },
   "coverageThreshold": {
-    "lines": 80
+    "lines": 100
   },
   "engines": {
     "node": ">=20"

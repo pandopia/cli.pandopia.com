@@ -7,7 +7,7 @@ const packageJson = JSON.parse(
 
 const threshold = Number(packageJson.coverageThreshold?.lines ?? 80);
 if (!Number.isFinite(threshold)) {
-  console.error('Invalid coverage threshold configuration.');
+  console.error('Configuration de seuil de couverture invalide.');
   process.exit(1);
 }
 
@@ -39,25 +39,34 @@ if (exitCode !== 0) {
   process.exit(exitCode ?? 1);
 }
 
-const match = combinedOutput.match(/# all files\s+\|\s+([\d.]+)\s+\|/);
-if (!match) {
-  console.error('Could not parse the coverage report.');
-  process.exit(1);
-}
-
-const lineCoverage = Number.parseFloat(match[1]);
-if (!Number.isFinite(lineCoverage)) {
-  console.error('Could not read the global line coverage value.');
-  process.exit(1);
-}
-
-if (lineCoverage < threshold) {
-  console.error(
-    `Coverage check failed: global line coverage ${lineCoverage.toFixed(2)}% is below ${threshold}%.`
+const files = [...combinedOutput.matchAll(/^#\s+(.+?)\s+\|\s+([\d.]+)\s+\|/gm)]
+  .map(([, file, lineCoverage]) => ({
+    file: file.trim(),
+    lineCoverage: Number.parseFloat(lineCoverage),
+  }))
+  .filter(
+    ({ file, lineCoverage }) =>
+      file !== 'all files' &&
+      !file.startsWith('test/') &&
+      Number.isFinite(lineCoverage)
   );
+
+if (files.length === 0) {
+  console.error("Impossible d'analyser le rapport de couverture.");
+  process.exit(1);
+}
+
+const failedFiles = files.filter(({ lineCoverage }) => lineCoverage < threshold);
+if (failedFiles.length > 0) {
+  console.error(
+    `Échec de la couverture: ${failedFiles.length} fichier(s) de production sont sous ${threshold}%.`
+  );
+  for (const { file, lineCoverage } of failedFiles) {
+    console.error(`- ${file}: ${lineCoverage.toFixed(2)}%`);
+  }
   process.exit(1);
 }
 
 console.log(
-  `Coverage check passed: global line coverage ${lineCoverage.toFixed(2)}% meets the ${threshold}% threshold.`
+  `Couverture validée: ${files.length} fichier(s) de production atteignent le seuil de ${threshold}%.`
 );
