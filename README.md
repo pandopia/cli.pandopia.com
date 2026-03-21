@@ -1,10 +1,10 @@
 # Pandopia CLI
 
-A mac-first CLI for the Pandopia catalog API.
+Une CLI pensée d'abord pour macOS pour l'API catalogue de Pandopia.
 
-## Install
+## Installation
 
-### Local development
+### Développement local
 
 ```bash
 bun install
@@ -12,7 +12,7 @@ bun run build
 npm install -g .
 ```
 
-### Usage
+### Utilisation
 
 ```bash
 pandopia
@@ -27,11 +27,11 @@ pandopia get diag_dpereglementaire 1235
 pandopia history diag_dpereglementaire 1235 DIAG_STATUS
 ```
 
-## Server selection
+## Sélection du serveur
 
-By default the CLI targets `https://app.pandopia.com`.
+Par défaut, la CLI cible `https://app.pandopia.com`.
 
-You can switch server per command:
+Vous pouvez changer de serveur pour chaque commande :
 
 ```bash
 pandopia --server test types
@@ -39,64 +39,64 @@ pandopia --server local params diag_dpereglementaire
 pandopia --server https://app.pandopia.com/api/catalog types
 ```
 
-Accepted server values:
+Valeurs de serveur acceptées :
 
 - `app`
 - `test`
 - `local`
-- a raw origin like `https://app.pandopia.com`
-- a full catalog base URL like `https://app.pandopia.com/api/catalog`
+- une origine brute comme `https://app.pandopia.com`
+- une URL complète de base catalogue comme `https://app.pandopia.com/api/catalog`
 
-The selected server is persisted in `~/.config/pandopia/config.json`.
+Le serveur sélectionné est enregistré dans `~/.config/pandopia/config.json`.
 
-## Authentication
+## Authentification
 
-`pandopia login` runs the two-step Pandopia auth flow:
+`pandopia login` exécute le flux d'authentification Pandopia en deux étapes :
 
 1. `POST /api/auth/loginensureclient`
 2. `POST /api/auth/accesstoken`
 
-Secrets are stored in the macOS Keychain via `/usr/bin/security`.
+Les secrets sont stockés dans le trousseau macOS via `/usr/bin/security`.
 
-If a token expires during a command, the CLI automatically tries `POST /api/auth/refreshtoken` once and retries the request.
+Si un jeton expire pendant une commande, la CLI tente automatiquement une fois `POST /api/auth/refreshtoken`, puis relance la requête.
 
-## Commands
+## Commandes
 
 ### `pandopia`
 
-Shows help, active server, and login status.
+Affiche l'aide, le serveur actif et l'état de connexion.
 
 ### `pandopia --version`
 
-Prints the CLI version from `package.json`.
+Affiche la version de la CLI depuis `package.json`.
 
 ### `pandopia login [email]`
 
-Prompts for the password with hidden input. If the email is omitted, the CLI prompts for it too.
+Demande le mot de passe avec saisie masquée. Si l'email est omis, la CLI le demande aussi.
 
 ### `pandopia logout`
 
-Clears the active server profile and its stored secrets.
+Supprime le profil du serveur actif et les secrets associés.
 
 ### `pandopia whoiam`
 
-Shows whether the CLI is connected, the email, the organization reference, and the API key identifier.
+Indique si la CLI est connectée, l'email, la référence d'organisation et l'identifiant de clé API.
 
 ### `pandopia status`
 
-Alias of `pandopia whoiam`.
+Alias de `pandopia whoiam`.
 
 ### `pandopia types`
 
-Lists exposed catalog types.
+Liste les types de catalogue exposés.
 
 ### `pandopia params <catalogType>`
 
-Shows the filters and params for a catalog type.
+Affiche les filtres et paramètres d'un type de catalogue.
 
 ### `pandopia list <catalogType> [flags]`
 
-Reserved flags:
+Options réservées :
 
 - `--page`
 - `--per-page`
@@ -105,9 +105,9 @@ Reserved flags:
 - `--json`
 - `--server`
 
-Any other `--key value` or `--KEY=value` flag is forwarded as-is to the API query string.
+Toute autre option `--key value` ou `--KEY=value` est transmise telle quelle à la query string de l'API.
 
-Examples:
+Exemples :
 
 ```bash
 pandopia list diag_dpereglementaire --DIAG_STATUS=valide --organismeRef=lmh_6
@@ -116,9 +116,9 @@ pandopia list diag_dpereglementaire --page 2 --per-page 20 --params DIAG_STATUS,
 
 ### `pandopia find <catalogType> <text> [flags]`
 
-Alias of `pandopia list <catalogType> --search <text>`.
+Alias de `pandopia list <catalogType> --search <text>`.
 
-Example:
+Exemple :
 
 ```bash
 pandopia find diag_dpereglementaire "lmh"
@@ -126,8 +126,8 @@ pandopia find diag_dpereglementaire "lmh"
 
 ### `pandopia get <catalogType> <objectId>`
 
-Fetches one object. Supports `--params`, `--json`, and `--server`.
+Récupère un objet. Prend en charge `--params`, `--json` et `--server`.
 
 ### `pandopia history <catalogType> <objectId> <paramCode>`
 
-Fetches the history of a parameter for one object.
+Récupère l'historique d'un paramètre pour un objet.
