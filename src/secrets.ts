@@ -1,5 +1,8 @@
+import { promises as fs } from 'node:fs';
+import { dirname, join } from 'node:path';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
+import { getDefaultConfigPath } from './config';
 import { normalizeServerInput } from './servers';
 
 const execFileAsync = promisify(execFile);
@@ -26,6 +29,12 @@ type ExecFileRunner = (
   file: string,
   args: string[]
 ) => Promise<ExecFileResult>;
+
+type FileSecretData = Record<string, Partial<Record<SecretKey, string>>>;
+
+export function getDefaultSecretsPath(): string {
+  return join(dirname(getDefaultConfigPath()), 'secrets.json');
+}
 
 function accountName(server: string, key: SecretKey): string {
   return `${normalizeServerInput(server)}::${key}`;
@@ -98,4 +107,69 @@ export class MacKeychainStore implements SecretStore {
       }
     }
   }
+}
+
+export class FileSecretStore implements SecretStore {
+  constructor(private readonly secretsPath = getDefaultSecretsPath()) {}
+
+  async get(server: string, key: SecretKey): Promise<string | null> {
+    const secrets = await this.readSecrets();
+    return secrets[normalizeServerInput(server)]?.[key] ?? null;
+  }
+
+  async set(server: string, key: SecretKey, value: string): Promise<void> {
+    const normalized = normalizeServerInput(server);
+    const secrets = await this.readSecrets();
+    secrets[normalized] = {
+      ...(secrets[normalized] || {}),
+      [key]: value,
+    };
+    await this.writeSecrets(secrets);
+  }
+
+  async delete(server: string, key: SecretKey): Promise<void> {
+    const normalized = normalizeServerInput(server);
+    const secrets = await this.readSecrets();
+    const current = {
+      ...(secrets[normalized] || {}),
+    };
+    delete current[key];
+
+    if (Object.keys(current).length > 0) {
+      secrets[normalized] = current;
+    } else {
+      delete secrets[normalized];
+    }
+
+    await this.writeSecrets(secrets);
+  }
+
+  private async readSecrets(): Promise<FileSecretData> {
+    try {
+      return JSON.parse(await fs.readFile(this.secretsPath, 'utf8')) as FileSecretData;
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+        return {};
+      }
+      throw error;
+    }
+  }
+
+  private async writeSecrets(secrets: FileSecretData): Promise<void> {
+    await fs.mkdir(dirname(this.secretsPath), { recursive: true });
+    await fs.writeFile(this.secretsPath, `${JSON.stringify(secrets, null, 2)}\n`, {
+      mode: 0o600,
+    });
+  }
+}
+
+export function createSecretStore(
+  platform = process.platform,
+  secretsPath = getDefaultSecretsPath()
+): SecretStore {
+  if (platform === 'darwin') {
+    return new MacKeychainStore(execFileAsync, platform);
+  }
+
+  return new FileSecretStore(secretsPath);
 }

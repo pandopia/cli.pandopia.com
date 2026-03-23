@@ -1,6 +1,6 @@
 # Pandopia CLI
 
-Une CLI pensée d'abord pour macOS pour l'API catalogue de Pandopia.
+Une CLI pour l'API catalogue de Pandopia, compatible macOS, Linux et Windows.
 
 ## Installation
 
@@ -57,7 +57,7 @@ Le serveur actif est enregistré dans `~/.config/pandopia/config.json` et toutes
 1. `POST /api/auth/loginensureclient`
 2. `POST /api/auth/accesstoken`
 
-Les secrets sont stockés dans le trousseau macOS via `/usr/bin/security`.
+Les secrets sont stockés dans le trousseau macOS via `/usr/bin/security` sur macOS, et dans un fichier local dédié sur Linux et Windows.
 
 Si un jeton expire pendant une commande, la CLI tente automatiquement une fois `POST /api/auth/refreshtoken`, puis relance la requête.
 

@@ -1,6 +1,6 @@
 import type { WhoIAmResponse, WhoIAmSummary, WriterLike } from './types';
 import { FileConfigStore } from './config';
-import { MacKeychainStore } from './secrets';
+import { createSecretStore } from './secrets';
 import { SessionStore, type SessionAuthState } from './session';
 import { TerminalPrompt, type Prompt } from './prompt';
 import { PandopiaApiClient, ApiError, AuthRequiredError, type FetchLike } from './api';
@@ -137,7 +137,7 @@ function createDefaultFetch(): FetchLike {
 export function createRuntimeDependencies(): CliDependencies {
   const sessionStore = new SessionStore(
     new FileConfigStore(),
-    new MacKeychainStore()
+    createSecretStore()
   );
   const prompt = new TerminalPrompt();
   const apiClient = new PandopiaApiClient(createDefaultFetch(), sessionStore);

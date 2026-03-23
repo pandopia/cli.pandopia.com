@@ -3,11 +3,17 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs/promises');
 const os = require('node:os');
 const path = require('node:path');
+const { constants: fsConstants } = require('node:fs');
 const { PassThrough } = require('node:stream');
 
 const { FileConfigStore, getDefaultConfigPath } = require('../dist/config.js');
 const { TerminalPrompt } = require('../dist/prompt.js');
-const { MacKeychainStore } = require('../dist/secrets.js');
+const {
+  MacKeychainStore,
+  FileSecretStore,
+  createSecretStore,
+  getDefaultSecretsPath,
+} = require('../dist/secrets.js');
 const { DEFAULT_SERVER } = require('../dist/servers.js');
 
 test('getDefaultConfigPath prefers XDG_CONFIG_HOME when available', () => {
@@ -204,4 +210,62 @@ test('MacKeychainStore handles missing secrets and rejects unsupported platforms
     () => new MacKeychainStore(async () => ({ stdout: '' }), 'linux'),
     /only supported on macOS/
   );
+});
+
+test('getDefaultSecretsPath reuses the Pandopia config directory', () => {
+  const previous = process.env.XDG_CONFIG_HOME;
+  process.env.XDG_CONFIG_HOME = '/tmp/pandopia-secrets';
+
+  try {
+    assert.equal(
+      getDefaultSecretsPath(),
+      '/tmp/pandopia-secrets/pandopia/secrets.json'
+    );
+  } finally {
+    if (previous === undefined) {
+      delete process.env.XDG_CONFIG_HOME;
+    } else {
+      process.env.XDG_CONFIG_HOME = previous;
+    }
+  }
+});
+
+test('FileSecretStore persists normalized secrets in a dedicated file', async () => {
+  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'pandopia-secrets-'));
+  const secretsPath = path.join(tempDir, 'secrets.json');
+  const store = new FileSecretStore(secretsPath);
+
+  assert.equal(await store.get('test', 'access_token'), null);
+
+  await store.set('test', 'access_token', 'access-1');
+  await store.set('test', 'refresh_token', 'refresh-1');
+  await store.set('app', 'client_id', 'client-1');
+
+  assert.equal(await store.get('https://test.pandopia.com', 'access_token'), 'access-1');
+
+  await store.delete('test', 'access_token');
+  const rawAfterFirstDelete = JSON.parse(await fs.readFile(secretsPath, 'utf8'));
+  assert.equal(rawAfterFirstDelete['https://test.pandopia.com'].refresh_token, 'refresh-1');
+
+  await store.delete('test', 'refresh_token');
+  const rawAfterSecondDelete = JSON.parse(await fs.readFile(secretsPath, 'utf8'));
+  assert.equal(rawAfterSecondDelete['https://test.pandopia.com'], undefined);
+  assert.equal(rawAfterSecondDelete[DEFAULT_SERVER].client_id, 'client-1');
+  assert.equal(await store.get('test', 'refresh_token'), null);
+
+  const stats = await fs.stat(secretsPath);
+  assert.ok((stats.mode & fsConstants.S_IRUSR) !== 0);
+});
+
+test('FileSecretStore propagates invalid JSON and createSecretStore selects the backend', async () => {
+  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'pandopia-secrets-invalid-'));
+  const secretsPath = path.join(tempDir, 'secrets.json');
+  await fs.writeFile(secretsPath, '{invalid json');
+
+  const store = new FileSecretStore(secretsPath);
+  await assert.rejects(() => store.get('app', 'access_token'), /Unexpected token|Expected property name/);
+
+  assert.ok(createSecretStore('darwin') instanceof MacKeychainStore);
+  assert.ok(createSecretStore('linux', secretsPath) instanceof FileSecretStore);
+  assert.ok(createSecretStore('win32', secretsPath) instanceof FileSecretStore);
 });
