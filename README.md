@@ -32,7 +32,7 @@ pandopia history diag_dpereglementaire 1235 DIAG_STATUS
 
 Par défaut, la CLI cible `https://app.pandopia.com`.
 
-Vous pouvez changer le serveur actif, même sans être connecté :
+Vous pouvez changer le serveur actif:
 
 ```bash
 pandopia setServer test
@@ -52,14 +52,7 @@ Le serveur actif est enregistré dans `~/.config/pandopia/config.json` et toutes
 
 ## Authentification
 
-`pandopia login` exécute le flux d'authentification Pandopia en deux étapes :
-
-1. `POST /api/auth/loginensureclient`
-2. `POST /api/auth/accesstoken`
-
-Les secrets sont stockés dans le trousseau macOS via `/usr/bin/security` sur macOS, et dans un fichier local dédié sur Linux et Windows.
-
-Si un jeton expire pendant une commande, la CLI tente automatiquement une fois `POST /api/auth/refreshtoken`, puis relance la requête.
+`pandopia login` pour vous identifier avec votre login et mot de passe.
 
 ## Commandes
 
@@ -139,3 +132,16 @@ Récupère l'historique d'un paramètre pour un objet.
 ## Licence
 
 Ce projet est distribué sous licence MIT. Vous pouvez l'utiliser, le modifier, le redistribuer et l'intégrer dans d'autres projets, y compris commerciaux, sans garantie.
+
+## Publication npm automatique
+
+Le dépôt contient un workflow GitHub Actions qui publie automatiquement le package sur npm à chaque `push` sur la branche `main`, uniquement si la version courante de `package.json` n'existe pas encore sur npm.
+
+Configuration requise :
+
+- ajouter le secret GitHub `NPM_TOKEN` avec un token npm autorisé à publier `@pandopia/cli`
+
+Commandes utiles :
+
+- `npm run publish:npm` : publie manuellement le package
+- `npm run publish:ci` : vérifie si la version existe déjà, puis publie seulement si nécessaire

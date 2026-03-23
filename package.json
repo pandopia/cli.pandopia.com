@@ -15,7 +15,9 @@
     "prepare": "npm run build",
     "test:unit": "npm run build && node --test",
     "test:coverage": "npm run build && node scripts/check-coverage.mjs",
-    "test": "npm run test:coverage"
+    "test": "npm run test:coverage",
+    "publish:npm": "npm publish --access public",
+    "publish:ci": "node scripts/publish-if-needed.mjs"
   },
   "coverageThreshold": {
     "lines": 100
