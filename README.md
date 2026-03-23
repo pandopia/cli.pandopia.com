@@ -135,3 +135,7 @@ Récupère un objet. Prend en charge `--params` et `--json`.
 ### `pandopia history <catalogType> <objectId> <paramCode>`
 
 Récupère l'historique d'un paramètre pour un objet.
+
+## Licence
+
+Ce projet est distribué sous licence MIT. Vous pouvez l'utiliser, le modifier, le redistribuer et l'intégrer dans d'autres projets, y compris commerciaux, sans garantie.
