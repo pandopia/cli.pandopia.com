@@ -69,6 +69,7 @@ export function renderRootHelp(status: SessionStatus): string {
     '  pandopia <command> [options]',
     '',
     'Commands:',
+    '  pandopia setServer <serveur>                Définit le serveur actif',
     '  pandopia login [email]                      Authenticate and store credentials',
     '  pandopia logout                             Clear credentials for the active server',
     '  pandopia whoiam                            Show the authenticated user and API key',
@@ -82,6 +83,7 @@ export function renderRootHelp(status: SessionStatus): string {
     '',
     'Examples:',
     '  pandopia --version',
+    '  pandopia setServer test',
     '  pandopia login cyril.bele@gmail.com',
     '  pandopia status',
     '  pandopia types',
@@ -93,7 +95,24 @@ export function renderRootHelp(status: SessionStatus): string {
   ].join('\n');
 }
 
-export function renderCommandUsage(command: 'list' | 'find' | 'get' | 'params' | 'history'): string {
+export function renderCommandUsage(
+  command: 'list' | 'find' | 'get' | 'params' | 'history' | 'setServer'
+): string {
+  if (command === 'setServer') {
+    return [
+      'Usage:',
+      '  pandopia setServer <serveur>',
+      '',
+      'Exemples :',
+      '  pandopia setServer test',
+      '  pandopia setServer local',
+      '  pandopia setServer https://app.pandopia.com/api/catalog',
+      '',
+      'Valeurs acceptées :',
+      '  app, test, local, une origine brute, ou une URL complète en /api/catalog.',
+    ].join('\n');
+  }
+
   if (command === 'list') {
     return [
       'Usage:',

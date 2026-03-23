@@ -115,13 +115,7 @@ function buildGetQuery(parsed: ParsedArguments): Record<string, string[]> {
   return query;
 }
 
-async function resolveServer(
-  parsed: ParsedArguments,
-  sessionStore: SessionStore
-): Promise<string> {
-  if (typeof parsed.reserved.server === 'string') {
-    return sessionStore.setActiveServer(parsed.reserved.server);
-  }
+async function resolveServer(sessionStore: SessionStore): Promise<string> {
   return sessionStore.getActiveServer();
 }
 
@@ -225,6 +219,27 @@ function buildWhoIAmSummary(input: {
   };
 }
 
+function buildWhoIAmJsonOutput(
+  summary: WhoIAmSummary,
+  payload?: WhoIAmResponse
+): Record<string, unknown> {
+  if (!payload) {
+    return {
+      connected: summary.connected,
+      server: summary.server,
+      email: summary.email,
+      organismeRef: summary.organismeRef,
+      apiKeyId: summary.apiKeyId,
+    };
+  }
+
+  return {
+    ...payload,
+    connected: summary.connected,
+    server: summary.server,
+  };
+}
+
 function isInvalidLoginError(error: unknown): boolean {
   if (!(error instanceof ApiError)) {
     return false;
@@ -267,7 +282,7 @@ async function runLogin(
   parsed: ParsedArguments,
   deps: CliDependencies
 ): Promise<number> {
-  const server = await resolveServer(parsed, deps.sessionStore);
+  const server = await resolveServer(deps.sessionStore);
   const providedEmail = parsed.positionals[1];
   const email =
     providedEmail || (await deps.prompt.ask('Email: '));
@@ -296,7 +311,7 @@ async function runTypes(
   parsed: ParsedArguments,
   deps: CliDependencies
 ): Promise<number> {
-  const server = await resolveServer(parsed, deps.sessionStore);
+  const server = await resolveServer(deps.sessionStore);
   const payload = await deps.apiClient.listTypes(server);
   writeLine(
     deps.stdout,
@@ -309,7 +324,7 @@ async function runWhoIAm(
   parsed: ParsedArguments,
   deps: CliDependencies
 ): Promise<number> {
-  const server = await resolveServer(parsed, deps.sessionStore);
+  const server = await resolveServer(deps.sessionStore);
   const authState = await deps.sessionStore.getAuthState(server);
   let connected = !!authState.accessToken;
   let payload: WhoIAmResponse | undefined;
@@ -336,8 +351,25 @@ async function runWhoIAm(
   });
   writeLine(
     deps.stdout,
-    shouldRenderJson(parsed) ? renderPrettyJson(payload || summary) : renderWhoIAm(summary)
+    shouldRenderJson(parsed)
+      ? renderPrettyJson(buildWhoIAmJsonOutput(summary, payload))
+      : renderWhoIAm(summary)
   );
+  return 0;
+}
+
+async function runSetServer(
+  parsed: ParsedArguments,
+  deps: CliDependencies
+): Promise<number> {
+  const serverInput = parsed.positionals[1];
+  if (!serverInput) {
+    writeLine(deps.stderr, renderCommandUsage('setServer'));
+    return 1;
+  }
+
+  const server = await deps.sessionStore.setActiveServer(serverInput);
+  writeLine(deps.stdout, `Serveur actif défini sur ${server}.`);
   return 0;
 }
 
@@ -351,7 +383,7 @@ async function runParams(
     return 1;
   }
 
-  const server = await resolveServer(parsed, deps.sessionStore);
+  const server = await resolveServer(deps.sessionStore);
   const payload = await deps.apiClient.getParams(server, catalogType);
   writeLine(
     deps.stdout,
@@ -370,7 +402,7 @@ async function runList(
     return 1;
   }
 
-  const server = await resolveServer(parsed, deps.sessionStore);
+  const server = await resolveServer(deps.sessionStore);
   const payload = await deps.apiClient.listObjects(
     server,
     catalogType,
@@ -422,7 +454,7 @@ async function runGet(
     return 1;
   }
 
-  const server = await resolveServer(parsed, deps.sessionStore);
+  const server = await resolveServer(deps.sessionStore);
   const payload = await deps.apiClient.getObject(
     server,
     catalogType,
@@ -448,7 +480,7 @@ async function runHistory(
     return 1;
   }
 
-  const server = await resolveServer(parsed, deps.sessionStore);
+  const server = await resolveServer(deps.sessionStore);
   const payload = await deps.apiClient.getHistory(
     server,
     catalogType,
@@ -466,7 +498,7 @@ async function runLogout(
   parsed: ParsedArguments,
   deps: CliDependencies
 ): Promise<number> {
-  const server = await resolveServer(parsed, deps.sessionStore);
+  const server = await resolveServer(deps.sessionStore);
   await deps.apiClient.logout(server);
   writeLine(deps.stdout, `Cleared credentials for ${normalizeServerInput(server)}.`);
   return 0;
@@ -494,22 +526,30 @@ export async function runCli(
   const command = parsed.positionals[0];
 
   try {
+    if (parsed.reserved.server !== undefined) {
+      writeLine(
+        deps.stderr,
+        'L\'option --server n\'est plus supportée. Utilisez "pandopia setServer <serveur>" à la place.'
+      );
+      return 1;
+    }
+
     if (parsed.reserved.version === true || parsed.reserved.version === 'true') {
       writeLine(deps.stdout, await getCliVersion());
       return 0;
     }
 
     if (!command) {
-      const status = await deps.sessionStore.getStatus(
-        typeof parsed.reserved.server === 'string'
-          ? await deps.sessionStore.setActiveServer(parsed.reserved.server)
-          : undefined
-      );
+      const status = await deps.sessionStore.getStatus();
       writeLine(deps.stdout, renderRootHelp(status));
       return 0;
     }
 
         switch (command) {
+            case 'setServer':
+            case 'setserver':
+            case 'set-server':
+                return await runSetServer(parsed, deps);
             case 'login':
                 return await runLogin(parsed, deps);
             case 'logout':

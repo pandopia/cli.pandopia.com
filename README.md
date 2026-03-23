@@ -17,6 +17,7 @@ npm install -g .
 ```bash
 pandopia
 pandopia --version
+pandopia setServer test
 pandopia login cyril.bele@gmail.com
 pandopia status
 pandopia types
@@ -31,12 +32,12 @@ pandopia history diag_dpereglementaire 1235 DIAG_STATUS
 
 Par défaut, la CLI cible `https://app.pandopia.com`.
 
-Vous pouvez changer de serveur pour chaque commande :
+Vous pouvez changer le serveur actif, même sans être connecté :
 
 ```bash
-pandopia --server test types
-pandopia --server local params diag_dpereglementaire
-pandopia --server https://app.pandopia.com/api/catalog types
+pandopia setServer test
+pandopia setServer local
+pandopia setServer https://app.pandopia.com/api/catalog
 ```
 
 Valeurs de serveur acceptées :
@@ -47,7 +48,7 @@ Valeurs de serveur acceptées :
 - une origine brute comme `https://app.pandopia.com`
 - une URL complète de base catalogue comme `https://app.pandopia.com/api/catalog`
 
-Le serveur sélectionné est enregistré dans `~/.config/pandopia/config.json`.
+Le serveur actif est enregistré dans `~/.config/pandopia/config.json` et toutes les commandes utilisent ensuite ce serveur.
 
 ## Authentification
 
@@ -78,9 +79,13 @@ Demande le mot de passe avec saisie masquée. Si l'email est omis, la CLI le dem
 
 Supprime le profil du serveur actif et les secrets associés.
 
+### `pandopia setServer <serveur>`
+
+Définit le serveur actif sans nécessiter de login.
+
 ### `pandopia whoiam`
 
-Indique si la CLI est connectée, l'email, la référence d'organisation et l'identifiant de clé API.
+Indique si la CLI est connectée, le serveur actuellement visé, l'email, la référence d'organisation et l'identifiant de clé API.
 
 ### `pandopia status`
 
@@ -103,7 +108,6 @@ Options réservées :
 - `--search`
 - `--params`
 - `--json`
-- `--server`
 
 Toute autre option `--key value` ou `--KEY=value` est transmise telle quelle à la query string de l'API.
 
@@ -126,7 +130,7 @@ pandopia find diag_dpereglementaire "lmh"
 
 ### `pandopia get <catalogType> <objectId>`
 
-Récupère un objet. Prend en charge `--params`, `--json` et `--server`.
+Récupère un objet. Prend en charge `--params` et `--json`.
 
 ### `pandopia history <catalogType> <objectId> <paramCode>`
 

@@ -159,6 +159,7 @@ test('pandopia with no args shows help and status', async () => {
   assert.match(runtime.readStdout(), /Pandopia Catalog CLI/);
   assert.match(runtime.readStdout(), /Active server: https:\/\/app\.pandopia\.com/);
   assert.match(runtime.readStdout(), /Login status: not logged in/);
+  assert.match(runtime.readStdout(), /pandopia setServer <serveur>/);
   assert.match(runtime.readStdout(), /pandopia history <catalogType> <objectId> <paramCode>/);
   assert.match(runtime.readStdout(), /pandopia --version/);
   assert.match(runtime.readStdout(), /pandopia find <catalogType> <text> \[flags\]/);
@@ -706,6 +707,7 @@ test('status reports not connected without requiring login', async () => {
 
   assert.equal(exitCode, 0);
   assert.match(runtime.readStdout(), /Connected: no/);
+  assert.match(runtime.readStdout(), /Server: https:\/\/app\.pandopia\.com/);
   assert.match(runtime.readStdout(), /Email: unknown/);
   assert.equal(runtime.readStderr(), '');
 });
@@ -742,9 +744,21 @@ test('whoiam uses the auth endpoint and status is an alias', async () => {
 
   assert.equal(exitCode, 0);
   assert.match(runtime.readStdout(), /Connected: yes/);
+  assert.match(runtime.readStdout(), /Server: https:\/\/app\.pandopia\.com/);
   assert.match(runtime.readStdout(), /Email: admin@pandopia\.com/);
   assert.match(runtime.readStdout(), /Organisation: francehabitation/);
   assert.match(runtime.readStdout(), /API key id: 23/);
+});
+
+test('setServer updates the active server without requiring login', async () => {
+  const runtime = createRuntime();
+
+  const exitCode = await runCli(['setServer', 'test'], runtime);
+
+  assert.equal(exitCode, 0);
+  assert.equal(await runtime.sessionStore.getActiveServer(), 'https://test.pandopia.com');
+  assert.equal(runtime.readStdout(), 'Serveur actif défini sur https://test.pandopia.com.\n');
+  assert.equal(runtime.readStderr(), '');
 });
 
 test('whoiam falls back to the local session when the backend route is unavailable', async () => {

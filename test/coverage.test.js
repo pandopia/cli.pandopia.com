@@ -254,11 +254,20 @@ test('les helpers de format couvrent les variantes de rendu', () => {
     }),
     /logged in as authenticated user/
   );
+  assert.match(
+    renderRootHelp({
+      server: DEFAULT_SERVER,
+      alias: 'app',
+      loggedIn: false,
+    }),
+    /pandopia setServer <serveur>/
+  );
   assert.match(renderCommandUsage('list'), /pandopia list <catalogType>/);
   assert.match(renderCommandUsage('find'), /pandopia find <catalogType> <text>/);
   assert.match(renderCommandUsage('get'), /pandopia get <catalogType> <objectId>/);
   assert.match(renderCommandUsage('history'), /pandopia history <catalogType> <objectId> <paramCode>/);
   assert.match(renderCommandUsage('params'), /pandopia params <catalogType>/);
+  assert.match(renderCommandUsage('setServer'), /pandopia setServer <serveur>/);
   assert.match(
     renderTypes([{ type: 'diag', objectName: 'Diagnostic' }]),
     /Diagnostic/
@@ -864,9 +873,26 @@ test('parseArguments, version et runCli couvrent les branches CLI restantes', as
 
   {
     const runtime = createRuntime();
-    const exitCode = await runCli(['--server', 'test'], runtime);
+    const exitCode = await runCli(['setServer', 'test'], runtime);
     assert.equal(exitCode, 0);
-    assert.match(runtime.readStdout(), /Active server: https:\/\/test\.pandopia\.com/);
+    assert.equal(runtime.readStdout(), 'Serveur actif défini sur https://test.pandopia.com.\n');
+  }
+
+  {
+    const runtime = createRuntime();
+    const exitCode = await runCli(['setServer'], runtime);
+    assert.equal(exitCode, 1);
+    assert.match(runtime.readStderr(), /pandopia setServer <serveur>/);
+  }
+
+  {
+    const runtime = createRuntime();
+    const exitCode = await runCli(['--server', 'test'], runtime);
+    assert.equal(exitCode, 1);
+    assert.equal(
+      runtime.readStderr(),
+      'L\'option --server n\'est plus supportée. Utilisez "pandopia setServer <serveur>" à la place.\n'
+    );
   }
 
   {
@@ -939,6 +965,34 @@ test('parseArguments, version et runCli couvrent les branches CLI restantes', as
     const exitCode = await runCli(['whoiam', '--json'], runtime);
     assert.equal(exitCode, 0);
     assert.match(runtime.readStdout(), /"connected": false/);
+    assert.match(runtime.readStdout(), /"server": "https:\/\/app\.pandopia\.com"/);
+  }
+
+  {
+    const runtime = createRuntime({
+      apiClient: {
+        async getWhoIAm() {
+          return {
+            status: 'ok',
+            data: {
+              email: 'api@example.com',
+            },
+          };
+        },
+      },
+    });
+    await runtime.sessionStore.saveLogin('app', {
+      email: 'saved@example.com',
+      accessToken: 'access-token',
+      refreshToken: 'refresh-token',
+      clientId: 'client-id',
+      clientSecret: 'client-secret',
+    });
+    const exitCode = await runCli(['whoiam', '--json'], runtime);
+    assert.equal(exitCode, 0);
+    assert.match(runtime.readStdout(), /"status": "ok"/);
+    assert.match(runtime.readStdout(), /"connected": true/);
+    assert.match(runtime.readStdout(), /"server": "https:\/\/app\.pandopia\.com"/);
   }
 
   {
@@ -992,7 +1046,7 @@ test('parseArguments, version et runCli couvrent les branches CLI restantes', as
     const runtime = createRuntime({
       apiClient: {
         async listObjects(server) {
-          assert.equal(server, 'https://test.pandopia.com');
+          assert.equal(server, DEFAULT_SERVER);
           return {
             status: 'ok',
             pagination: { page: 1, perPage: 1, nbPages: 1, totalNb: 1 },
@@ -1008,7 +1062,7 @@ test('parseArguments, version et runCli couvrent les branches CLI restantes', as
       clientId: 'client-id',
       clientSecret: 'client-secret',
     });
-    const exitCode = await runCli(['list', 'diag', '--server', 'test'], runtime);
+    const exitCode = await runCli(['list', 'diag'], runtime);
     assert.equal(exitCode, 0);
     assert.match(runtime.readStdout(), /Page 1 \/ 1/);
   }
