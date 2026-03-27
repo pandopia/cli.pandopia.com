@@ -1,7 +1,7 @@
 {
   "name": "@pandopia/cli",
-  "version": "0.1.1",
-  "description": "CLI for the Pandopia catalog API",
+  "version": "0.1.2",
+  "description": "CLI pour l'API catalogue Pandopia",
   "bin": {
     "pandopia": "dist/index.js"
   },

@@ -9,6 +9,10 @@ import type {
 } from './types';
 import type { SessionStatus } from './session';
 
+function escapeMarkdownCell(value: unknown): string {
+  return stringifyCell(value).replace(/\|/g, '\\|').replace(/\n/g, '<br />');
+}
+
 function stringifyCell(value: unknown): string {
   if (value === null || value === undefined) {
     return '';
@@ -22,68 +26,84 @@ function stringifyCell(value: unknown): string {
   return String(value);
 }
 
-export function renderTable(
+function collectColumns(rows: Array<Record<string, unknown>>): string[] {
+  const columns: string[] = [];
+  const seen = new Set<string>();
+
+  for (const row of rows) {
+    for (const key of Object.keys(row)) {
+      if (!seen.has(key)) {
+        seen.add(key);
+        columns.push(key);
+      }
+    }
+  }
+
+  return columns;
+}
+
+export function renderMarkdownTable(
   rows: Array<Record<string, unknown>>,
   columns: string[]
 ): string {
   if (rows.length === 0) {
-    return 'No results.';
+    return 'Aucun résultat.';
   }
 
-  const widths = columns.map((column) => column.length);
-  const renderedRows = rows.map((row) =>
-    columns.map((column, index) => {
-      const value = stringifyCell(row[column]);
-      widths[index] = Math.max(widths[index], value.length);
-      return value;
-    })
-  );
-
-  const header = columns
-    .map((column, index) => column.padEnd(widths[index]))
-    .join('  ');
-  const separator = widths.map((width) => '-'.repeat(width)).join('  ');
-  const body = renderedRows.map((row) =>
-    row.map((value, index) => value.padEnd(widths[index])).join('  ')
+  const header = `| ${columns.join(' | ')} |`;
+  const separator = `| ${columns.map(() => '---').join(' | ')} |`;
+  const body = rows.map(
+    (row) =>
+      `| ${columns.map((column) => escapeMarkdownCell(row[column])).join(' | ')} |`
   );
 
   return [header, separator, ...body].join('\n');
 }
 
+export function renderTable(
+  rows: Array<Record<string, unknown>>,
+  columns: string[]
+): string {
+  return renderMarkdownTable(rows, columns);
+}
+
 function renderStatus(status: SessionStatus): string {
   if (status.loggedIn) {
-    const label = status.userName || status.email || 'authenticated user';
-    return `logged in as ${label}`;
+    const label = status.userName || status.email || 'utilisateur authentifié';
+    return `connecté en tant que ${label}`;
   }
-  return 'not logged in';
+  return 'non connecté';
 }
 
 export function renderRootHelp(status: SessionStatus): string {
   return [
-    'Pandopia Catalog CLI',
+    'CLI catalogue Pandopia',
     '',
-    `Active server: ${status.server}`,
-    `Login status: ${renderStatus(status)}`,
+    `Serveur actif : ${status.server}`,
+    `Statut de connexion : ${renderStatus(status)}`,
+    `Format par défaut : ${status.defaultFormat}`,
     '',
-    'Usage:',
+    'Usage :',
     '  pandopia <command> [options]',
     '',
-    'Commands:',
+    'Commandes :',
     '  pandopia setServer <serveur>                Définit le serveur actif',
-    '  pandopia login [email]                      Authenticate and store credentials',
-    '  pandopia logout                             Clear credentials for the active server',
-    '  pandopia whoiam                            Show the authenticated user and API key',
-    '  pandopia status                            Alias of whoiam',
-    '  pandopia types                              List exposed catalog types',
-    '  pandopia params <catalogType>               Show filters and params for a catalog type',
-    '  pandopia list <catalogType> [flags]         List catalog objects',
-    '  pandopia find <catalogType> <text> [flags]  Alias of list --search',
-    '  pandopia get <catalogType> <objectId>       Get one catalog object',
-    '  pandopia history <catalogType> <objectId> <paramCode>  Show a param history',
+    '  pandopia setFormat <format>                Définit le format de sortie par défaut',
+    '  pandopia login [email]                      Authentifie et stocke les identifiants',
+    '  pandopia logout                             Supprime les identifiants du serveur actif',
+    '  pandopia whoiam                             Affiche l’utilisateur authentifié et la clé API',
+    '  pandopia status                             Alias de whoiam',
+    '  pandopia types [--json|--jsonl|--md]        Liste les types de catalogue exposés',
+    '  pandopia params <catalogType> [flags]       Affiche les filtres et paramètres d’un type',
+    '  pandopia list <catalogType> [flags]         Liste les objets du catalogue',
+    '  pandopia find <catalogType> <text> [flags]  Alias de list --search',
+    '  pandopia get <catalogType> <objectId> [flags]  Récupère un objet du catalogue',
+    '  pandopia history <catalogType> <objectId> <paramCode> [flags]  Affiche un historique',
     '',
-    'Examples:',
+    'Exemples :',
     '  pandopia --version',
     '  pandopia setServer test',
+    '  pandopia setFormat jsonl',
     '  pandopia login cyril.bele@gmail.com',
     '  pandopia status',
     '  pandopia types',
@@ -96,11 +116,11 @@ export function renderRootHelp(status: SessionStatus): string {
 }
 
 export function renderCommandUsage(
-  command: 'list' | 'find' | 'get' | 'params' | 'history' | 'setServer'
+  command: 'list' | 'find' | 'get' | 'params' | 'history' | 'setServer' | 'setFormat'
 ): string {
   if (command === 'setServer') {
     return [
-      'Usage:',
+      'Usage :',
       '  pandopia setServer <serveur>',
       '',
       'Exemples :',
@@ -113,72 +133,84 @@ export function renderCommandUsage(
     ].join('\n');
   }
 
+  if (command === 'setFormat') {
+    return [
+      'Usage :',
+      '  pandopia setFormat <json|jsonl|md>',
+      '',
+      'Exemples :',
+      '  pandopia setFormat md',
+      '  pandopia setFormat json',
+      '  pandopia setFormat jsonl',
+    ].join('\n');
+  }
+
   if (command === 'list') {
     return [
-      'Usage:',
-      '  pandopia list <catalogType> [--page N] [--per-page N] [--search TEXT] [--params A,B] [filters...]',
+      'Usage :',
+      '  pandopia list <catalogType> [--page N] [--per-page N] [--search TEXT] [--params A,B] [--json|--jsonl|--md] [filters...]',
       '',
-      'Example:',
+      'Exemple :',
       '  pandopia list diag_dpereglementaire --DIAG_STATUS=valide --organismeRef=lmh_6',
       '',
-      'Hint:',
-      '  Run pandopia types to discover available catalog types.',
+      'Astuce :',
+      '  Utilisez pandopia types pour découvrir les types de catalogue disponibles.',
     ].join('\n');
   }
 
   if (command === 'find') {
     return [
-      'Usage:',
-      '  pandopia find <catalogType> <text> [--page N] [--per-page N] [--params A,B] [filters...]',
+      'Usage :',
+      '  pandopia find <catalogType> <text> [--page N] [--per-page N] [--params A,B] [--json|--jsonl|--md] [filters...]',
       '',
-      'Example:',
+      'Exemple :',
       '  pandopia find diag_dpereglementaire "lmh"',
       '',
-      'Hint:',
-      '  Run pandopia types to discover available catalog types.',
+      'Astuce :',
+      '  Utilisez pandopia types pour découvrir les types de catalogue disponibles.',
     ].join('\n');
   }
 
   if (command === 'get') {
     return [
-      'Usage:',
-      '  pandopia get <catalogType> <objectId> [--params A,B]',
+      'Usage :',
+      '  pandopia get <catalogType> <objectId> [--params A,B] [--json|--jsonl|--md]',
       '',
-      'Example:',
+      'Exemple :',
       '  pandopia get diag_dpereglementaire 1235',
       '',
-      'Hint:',
-      '  Run pandopia types to discover available catalog types.',
+      'Astuce :',
+      '  Utilisez pandopia types pour découvrir les types de catalogue disponibles.',
     ].join('\n');
   }
 
   if (command === 'history') {
     return [
-      'Usage:',
-      '  pandopia history <catalogType> <objectId> <paramCode>',
+      'Usage :',
+      '  pandopia history <catalogType> <objectId> <paramCode> [--json|--jsonl|--md]',
       '',
-      'Example:',
+      'Exemple :',
       '  pandopia history diag_dpereglementaire 1235 DIAG_STATUS',
       '',
-      'Hint:',
-      '  Run pandopia params <catalogType> to discover available params.',
+      'Astuce :',
+      '  Utilisez pandopia params <catalogType> pour découvrir les paramètres disponibles.',
     ].join('\n');
   }
 
   return [
-    'Usage:',
-    '  pandopia params <catalogType>',
+    'Usage :',
+    '  pandopia params <catalogType> [--json|--jsonl|--md]',
     '',
-    'Example:',
+    'Exemple :',
     '  pandopia params diag_dpereglementaire',
     '',
-    'Hint:',
-    '  Run pandopia types to discover available catalog types.',
+    'Astuce :',
+    '  Utilisez pandopia types pour découvrir les types de catalogue disponibles.',
   ].join('\n');
 }
 
 export function renderTypes(types: CatalogType[]): string {
-  return renderTable(
+  return renderMarkdownTable(
     types.map((item) => ({
       type: item.type,
       objectName: item.objectName,
@@ -204,13 +236,13 @@ function getParamColumns(params: CatalogParamDefinition[]): string[] {
 
 export function renderParams(data: CatalogTypeParamsData): string {
   const filters = data.filters.length
-    ? data.filters.map((filter) => `- ${filter}`).join('\n')
-    : 'No filters.';
+    ? data.filters.map((filter) => `- \`${filter}\``).join('\n')
+    : 'Aucun filtre.';
   const columns = getParamColumns(data.params);
   const params =
     data.params.length === 0
-      ? 'No params.'
-      : renderTable(
+      ? 'Aucun paramètre.'
+      : renderMarkdownTable(
           data.params.map((param) => {
             const row: Record<string, unknown> = {};
             for (const column of columns) {
@@ -221,19 +253,36 @@ export function renderParams(data: CatalogTypeParamsData): string {
           columns
         );
 
-  return ['Filters:', filters, '', 'Params:', params].join('\n');
+  return ['## Filtres', '', filters, '', '## Paramètres', '', params].join('\n');
 }
 
 export function renderPagination(pagination: Pagination): string {
-  return `Page ${pagination.page} / ${pagination.nbPages} | perPage ${pagination.perPage} | total ${pagination.totalNb}`;
+  return `Page ${pagination.page} / ${pagination.nbPages} | par page ${pagination.perPage} | total ${pagination.totalNb}`;
+}
+
+export function renderRecord(record: Record<string, unknown>): string {
+  const entries = Object.entries(record).map(([field, value]) => ({
+    champ: field,
+    valeur: value,
+  }));
+
+  return renderMarkdownTable(entries, ['champ', 'valeur']);
+}
+
+export function renderRecords(rows: Array<Record<string, unknown>>): string {
+  if (rows.length === 0) {
+    return 'Aucun résultat.';
+  }
+
+  return renderMarkdownTable(rows, collectColumns(rows));
 }
 
 export function renderHistory(entries: CatalogParamHistoryEntry[]): string {
   if (entries.length === 0) {
-    return 'No history.';
+    return 'Aucun historique.';
   }
 
-  return renderTable(
+  return renderMarkdownTable(
     entries.map((entry) => ({
       changedAt: entry.changedAt,
       mode: entry.mode,
@@ -251,11 +300,14 @@ export function renderHistory(entries: CatalogParamHistoryEntry[]): string {
 
 export function renderWhoIAm(summary: WhoIAmSummary): string {
   return [
-    `Connected: ${summary.connected ? 'yes' : 'no'}`,
-    `Server: ${summary.server}`,
-    `Email: ${summary.email || 'unknown'}`,
-    `Organisation: ${summary.organismeRef || 'unknown'}`,
-    `API key id: ${summary.apiKeyId || 'unknown'}`,
+    '## Statut',
+    '',
+    `- Connecté : ${summary.connected ? 'oui' : 'non'}`,
+    `- Serveur : ${summary.server}`,
+    `- Format par défaut : ${summary.defaultFormat}`,
+    `- Email : ${summary.email || 'inconnu'}`,
+    `- Organisation : ${summary.organismeRef || 'inconnue'}`,
+    `- Identifiant de clé API : ${summary.apiKeyId || 'inconnu'}`,
   ].join('\n');
 }
 
@@ -263,14 +315,16 @@ export function renderPrettyJson(value: unknown): string {
   return JSON.stringify(value, null, 2);
 }
 
-export function renderJsonLines(
-  rows: Array<Record<string, unknown>>
-): string {
-  if (rows.length === 0) {
-    return 'No results.';
+export function renderJsonLines(value: unknown): string {
+  if (Array.isArray(value)) {
+    return value.map((row) => JSON.stringify(row)).join('\n');
   }
 
-  return rows.map((row) => JSON.stringify(row)).join('\n');
+  if (value === undefined) {
+    return '';
+  }
+
+  return JSON.stringify(value);
 }
 
 export function writeLine(writer: WriterLike, message = ''): void {

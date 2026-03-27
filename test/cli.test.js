@@ -10,6 +10,7 @@ const { DEFAULT_SERVER } = require('../dist/servers.js');
 class MemoryConfigStore {
   constructor(initialServer = DEFAULT_SERVER) {
     this.activeServer = initialServer;
+    this.defaultFormat = 'md';
     this.profiles = {};
   }
 
@@ -19,6 +20,14 @@ class MemoryConfigStore {
 
   async setActiveServer(server) {
     this.activeServer = server;
+  }
+
+  async getDefaultFormat() {
+    return this.defaultFormat;
+  }
+
+  async setDefaultFormat(format) {
+    this.defaultFormat = format;
   }
 
   async getProfile(server) {
@@ -156,10 +165,12 @@ test('pandopia with no args shows help and status', async () => {
   const exitCode = await runCli([], runtime);
 
   assert.equal(exitCode, 0);
-  assert.match(runtime.readStdout(), /Pandopia Catalog CLI/);
-  assert.match(runtime.readStdout(), /Active server: https:\/\/app\.pandopia\.com/);
-  assert.match(runtime.readStdout(), /Login status: not logged in/);
+  assert.match(runtime.readStdout(), /CLI catalogue Pandopia/);
+  assert.match(runtime.readStdout(), /Serveur actif : https:\/\/app\.pandopia\.com/);
+  assert.match(runtime.readStdout(), /Statut de connexion : non connecté/);
+  assert.match(runtime.readStdout(), /Format par défaut : md/);
   assert.match(runtime.readStdout(), /pandopia setServer <serveur>/);
+  assert.match(runtime.readStdout(), /pandopia setFormat <format>/);
   assert.match(runtime.readStdout(), /pandopia history <catalogType> <objectId> <paramCode>/);
   assert.match(runtime.readStdout(), /pandopia --version/);
   assert.match(runtime.readStdout(), /pandopia find <catalogType> <text> \[flags\]/);
@@ -224,7 +235,7 @@ test('unauthenticated catalog command returns a clean error instead of a stack t
 
   assert.equal(exitCode, 1);
   assert.equal(runtime.readStdout(), '');
-  assert.equal(runtime.readStderr(), 'Run pandopia login <email>\n');
+  assert.equal(runtime.readStderr(), 'Exécutez pandopia login <email>\n');
 });
 
 test('login stores credentials after loginensureclient and accesstoken', async () => {
@@ -273,7 +284,7 @@ test('login stores credentials after loginensureclient and accesstoken', async (
     'client-secret'
   );
   assert.equal(runtime.config.profiles[DEFAULT_SERVER].email, 'cyril.bele@gmail.com');
-  assert.match(runtime.readStdout(), /Logged in on https:\/\/app\.pandopia\.com as Cyril Bele/);
+  assert.match(runtime.readStdout(), /Connecté sur https:\/\/app\.pandopia\.com en tant que Cyril Bele/);
 });
 
 test('login re-prompts for password when credentials are incorrect', async () => {
@@ -325,7 +336,7 @@ test('login re-prompts for password when credentials are incorrect', async () =>
   );
   assert.match(
     runtime.readStderr(),
-    /Email or password incorrect\. Re-enter password or press Ctrl\+C to cancel\./
+    /Email or password incorrect\. Saisissez à nouveau le mot de passe ou appuyez sur Ctrl\+C pour annuler\./
   );
 });
 
@@ -436,7 +447,7 @@ test('login retries loginensureclient with selected userId on multiple accounts'
     await runtime.secrets.get(DEFAULT_SERVER, 'access_token'),
     'access-token'
   );
-  assert.match(runtime.readStdout(), /Logged in on https:\/\/app\.pandopia\.com as Account B/);
+  assert.match(runtime.readStdout(), /Connecté sur https:\/\/app\.pandopia\.com en tant que Account B/);
 });
 
 test('multiple account prompt omits the repeated email from account labels', async () => {
@@ -626,8 +637,9 @@ test('list forwards reserved and passthrough query params with preserved casing'
   );
 
   assert.equal(exitCode, 0);
-  assert.match(runtime.readStdout(), /Page 2 \/ 3 \| perPage 5 \| total 12/);
-  assert.match(runtime.readStdout(), /\{"id":1235,"DIAG_STATUS":"valide","organismeRef":"lmh_6"\}/);
+  assert.match(runtime.readStdout(), /Page 2 \/ 3 \| par page 5 \| total 12/);
+  assert.match(runtime.readStdout(), /\| id \| DIAG_STATUS \| organismeRef \|/);
+  assert.match(runtime.readStdout(), /\| 1235 \| valide \| lmh_6 \|/);
 });
 
 test('find aliases list with search and preserves additional filters', async () => {
@@ -659,8 +671,9 @@ test('find aliases list with search and preserves additional filters', async () 
   );
 
   assert.equal(exitCode, 0);
-  assert.match(runtime.readStdout(), /Page 1 \/ 1 \| perPage 10 \| total 1/);
-  assert.match(runtime.readStdout(), /\{"id":1235,"organismeRef":"lmh_6","DIAG_STATUS":"valide"\}/);
+  assert.match(runtime.readStdout(), /Page 1 \/ 1 \| par page 10 \| total 1/);
+  assert.match(runtime.readStdout(), /\| id \| organismeRef \| DIAG_STATUS \|/);
+  assert.match(runtime.readStdout(), /\| 1235 \| lmh_6 \| valide \|/);
 });
 
 test('catalog commands retry on the dispatch route when the live route is misconfigured', async () => {
@@ -706,9 +719,10 @@ test('status reports not connected without requiring login', async () => {
   const exitCode = await runCli(['status'], runtime);
 
   assert.equal(exitCode, 0);
-  assert.match(runtime.readStdout(), /Connected: no/);
-  assert.match(runtime.readStdout(), /Server: https:\/\/app\.pandopia\.com/);
-  assert.match(runtime.readStdout(), /Email: unknown/);
+  assert.match(runtime.readStdout(), /Connecté : non/);
+  assert.match(runtime.readStdout(), /Serveur : https:\/\/app\.pandopia\.com/);
+  assert.match(runtime.readStdout(), /Format par défaut : md/);
+  assert.match(runtime.readStdout(), /Email : inconnu/);
   assert.equal(runtime.readStderr(), '');
 });
 
@@ -743,11 +757,12 @@ test('whoiam uses the auth endpoint and status is an alias', async () => {
   const exitCode = await runCli(['status'], runtime);
 
   assert.equal(exitCode, 0);
-  assert.match(runtime.readStdout(), /Connected: yes/);
-  assert.match(runtime.readStdout(), /Server: https:\/\/app\.pandopia\.com/);
-  assert.match(runtime.readStdout(), /Email: admin@pandopia\.com/);
-  assert.match(runtime.readStdout(), /Organisation: francehabitation/);
-  assert.match(runtime.readStdout(), /API key id: 23/);
+  assert.match(runtime.readStdout(), /Connecté : oui/);
+  assert.match(runtime.readStdout(), /Serveur : https:\/\/app\.pandopia\.com/);
+  assert.match(runtime.readStdout(), /Format par défaut : md/);
+  assert.match(runtime.readStdout(), /Email : admin@pandopia\.com/);
+  assert.match(runtime.readStdout(), /Organisation : francehabitation/);
+  assert.match(runtime.readStdout(), /Identifiant de clé API : 23/);
 });
 
 test('setServer updates the active server without requiring login', async () => {
@@ -759,6 +774,22 @@ test('setServer updates the active server without requiring login', async () => 
   assert.equal(await runtime.sessionStore.getActiveServer(), 'https://test.pandopia.com');
   assert.equal(runtime.readStdout(), 'Serveur actif défini sur https://test.pandopia.com.\n');
   assert.equal(runtime.readStderr(), '');
+});
+
+test('setFormat persists the default format and status exposes it', async () => {
+  const runtime = createRuntime();
+
+  const exitCode = await runCli(['setFormat', 'jsonl'], runtime);
+
+  assert.equal(exitCode, 0);
+  assert.equal(runtime.config.defaultFormat, 'jsonl');
+  assert.equal(runtime.readStdout(), 'Format par défaut défini sur jsonl.\n');
+
+  const beforeStatus = runtime.readStdout().length;
+  const statusExitCode = await runCli(['status', '--json'], runtime);
+
+  assert.equal(statusExitCode, 0);
+  assert.match(runtime.readStdout().slice(beforeStatus), /"defaultFormat": "jsonl"/);
 });
 
 test('whoiam falls back to the local session when the backend route is unavailable', async () => {
@@ -790,10 +821,10 @@ test('whoiam falls back to the local session when the backend route is unavailab
   const exitCode = await runCli(['whoiam'], runtime);
 
   assert.equal(exitCode, 0);
-  assert.match(runtime.readStdout(), /Connected: yes/);
-  assert.match(runtime.readStdout(), /Email: admin@pandopia\.com/);
-  assert.match(runtime.readStdout(), /Organisation: francehabitation/);
-  assert.match(runtime.readStdout(), /API key id: client-id/);
+  assert.match(runtime.readStdout(), /Connecté : oui/);
+  assert.match(runtime.readStdout(), /Email : admin@pandopia\.com/);
+  assert.match(runtime.readStdout(), /Organisation : francehabitation/);
+  assert.match(runtime.readStdout(), /Identifiant de clé API : client-id/);
   assert.equal(runtime.readStderr(), '');
 });
 
@@ -882,7 +913,72 @@ test('history maps to the catalog history endpoint and supports json output', as
   }
 });
 
-test('params and get support readable output and json output', async () => {
+test('list supports jsonl output and explicit format flags override the configured default', async () => {
+  const runtime = createRuntime({
+    fetchImpl: async (url) => {
+      if (url.endsWith('/api/catalog/diag_dpereglementaire')) {
+        return createResponse(200, {
+          status: 'ok',
+          pagination: { page: 1, perPage: 10, nbPages: 1, totalNb: 1 },
+          data: [{ id: 1235, DIAG_STATUS: 'valide' }],
+        });
+      }
+
+      throw new Error(`Unexpected URL ${url}`);
+    },
+  });
+
+  await runtime.sessionStore.saveLogin(DEFAULT_SERVER, {
+    email: 'admin@pandopia.com',
+    accessToken: 'access-token',
+    refreshToken: 'refresh-token',
+    clientId: 'client-id',
+    clientSecret: 'client-secret',
+  });
+  await runtime.sessionStore.setDefaultFormat('json');
+
+  const jsonlExitCode = await runCli(
+    ['list', '--jsonl', 'diag_dpereglementaire'],
+    runtime
+  );
+
+  assert.equal(jsonlExitCode, 0);
+  assert.equal(runtime.readStdout(), '{"id":1235,"DIAG_STATUS":"valide"}\n');
+
+  const markdownRuntime = createRuntime({
+    fetchImpl: async (url) => {
+      if (url.endsWith('/api/catalog/diag_dpereglementaire')) {
+        return createResponse(200, {
+          status: 'ok',
+          pagination: { page: 1, perPage: 10, nbPages: 1, totalNb: 1 },
+          data: [{ id: 1235, DIAG_STATUS: 'valide' }],
+        });
+      }
+
+      throw new Error(`Unexpected URL ${url}`);
+    },
+  });
+
+  await markdownRuntime.sessionStore.saveLogin(DEFAULT_SERVER, {
+    email: 'admin@pandopia.com',
+    accessToken: 'access-token',
+    refreshToken: 'refresh-token',
+    clientId: 'client-id',
+    clientSecret: 'client-secret',
+  });
+  await markdownRuntime.sessionStore.setDefaultFormat('jsonl');
+
+  const markdownExitCode = await runCli(
+    ['list', '--md', 'diag_dpereglementaire'],
+    markdownRuntime
+  );
+
+  assert.equal(markdownExitCode, 0);
+  assert.match(markdownRuntime.readStdout(), /Page 1 \/ 1 \| par page 10 \| total 1/);
+  assert.match(markdownRuntime.readStdout(), /\| id \| DIAG_STATUS \|/);
+});
+
+test('params and get support markdown and json output', async () => {
   {
     const runtime = createRuntime({
       fetchImpl: async (url) => {
@@ -911,7 +1007,7 @@ test('params and get support readable output and json output', async () => {
 
     const exitCode = await runCli(['params', 'diag_dpereglementaire'], runtime);
     assert.equal(exitCode, 0);
-    assert.match(runtime.readStdout(), /Filters:/);
+    assert.match(runtime.readStdout(), /## Filtres/);
     assert.match(runtime.readStdout(), /DIAG_STATUS/);
     assert.match(runtime.readStdout(), /Statut/);
   }

@@ -1,6 +1,11 @@
 import { promises as fs } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { homedir } from 'node:os';
+import {
+  DEFAULT_OUTPUT_FORMAT,
+  normalizeOutputFormat,
+  type OutputFormat,
+} from './output-format';
 import { DEFAULT_SERVER, normalizeServerInput } from './servers';
 
 export interface ProfileConfig {
@@ -12,12 +17,15 @@ export interface ProfileConfig {
 
 export interface AppConfig {
   activeServer: string;
+  defaultFormat: OutputFormat;
   profiles: Record<string, ProfileConfig>;
 }
 
 export interface ConfigStore {
   getActiveServer(): Promise<string>;
   setActiveServer(server: string): Promise<void>;
+  getDefaultFormat(): Promise<OutputFormat>;
+  setDefaultFormat(format: OutputFormat): Promise<void>;
   getProfile(server: string): Promise<ProfileConfig | undefined>;
   upsertProfile(server: string, patch: ProfileConfig): Promise<void>;
   clearProfile(server: string): Promise<void>;
@@ -32,6 +40,7 @@ export function getDefaultConfigPath(): string {
 function getDefaultConfig(): AppConfig {
   return {
     activeServer: DEFAULT_SERVER,
+    defaultFormat: DEFAULT_OUTPUT_FORMAT,
     profiles: {},
   };
 }
@@ -47,6 +56,17 @@ export class FileConfigStore implements ConfigStore {
   async setActiveServer(server: string): Promise<void> {
     const config = await this.readConfig();
     config.activeServer = normalizeServerInput(server);
+    await this.writeConfig(config);
+  }
+
+  async getDefaultFormat(): Promise<OutputFormat> {
+    const config = await this.readConfig();
+    return config.defaultFormat;
+  }
+
+  async setDefaultFormat(format: OutputFormat): Promise<void> {
+    const config = await this.readConfig();
+    config.defaultFormat = normalizeOutputFormat(format);
     await this.writeConfig(config);
   }
 
@@ -79,6 +99,7 @@ export class FileConfigStore implements ConfigStore {
       const parsed = JSON.parse(raw) as Partial<AppConfig>;
       return {
         activeServer: normalizeServerInput(parsed.activeServer || DEFAULT_SERVER),
+        defaultFormat: normalizeOutputFormat(parsed.defaultFormat),
         profiles: parsed.profiles || {},
       };
     } catch (error) {

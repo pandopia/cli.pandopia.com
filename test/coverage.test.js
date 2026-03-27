@@ -24,6 +24,7 @@ const {
   renderTable,
   renderRootHelp,
   renderCommandUsage,
+  renderRecords,
   renderTypes,
   renderParams,
   renderPagination,
@@ -48,6 +49,7 @@ const { getCliVersion } = require('../dist/version.js');
 class MemoryConfigStore {
   constructor(initialServer = DEFAULT_SERVER) {
     this.activeServer = initialServer;
+    this.defaultFormat = 'md';
     this.profiles = {};
   }
 
@@ -57,6 +59,14 @@ class MemoryConfigStore {
 
   async setActiveServer(server) {
     this.activeServer = server;
+  }
+
+  async getDefaultFormat() {
+    return this.defaultFormat;
+  }
+
+  async setDefaultFormat(format) {
+    this.defaultFormat = format;
   }
 
   async getProfile(server) {
@@ -241,7 +251,7 @@ test('FileConfigStore couvre le fallback HOME et les erreurs de lecture invalide
 });
 
 test('les helpers de format couvrent les variantes de rendu', () => {
-  assert.equal(renderTable([], ['id']), 'No results.');
+  assert.equal(renderTable([], ['id']), 'Aucun résultat.');
   assert.match(
     renderTable([{ list: [1, { ok: true }], meta: { a: 1 } }], ['list', 'meta']),
     /1, \{"ok":true\}/
@@ -250,14 +260,16 @@ test('les helpers de format couvrent les variantes de rendu', () => {
     renderRootHelp({
       server: DEFAULT_SERVER,
       alias: 'app',
+      defaultFormat: 'md',
       loggedIn: true,
     }),
-    /logged in as authenticated user/
+    /connecté en tant que utilisateur authentifié/
   );
   assert.match(
     renderRootHelp({
       server: DEFAULT_SERVER,
       alias: 'app',
+      defaultFormat: 'md',
       loggedIn: false,
     }),
     /pandopia setServer <serveur>/
@@ -268,13 +280,14 @@ test('les helpers de format couvrent les variantes de rendu', () => {
   assert.match(renderCommandUsage('history'), /pandopia history <catalogType> <objectId> <paramCode>/);
   assert.match(renderCommandUsage('params'), /pandopia params <catalogType>/);
   assert.match(renderCommandUsage('setServer'), /pandopia setServer <serveur>/);
+  assert.match(renderCommandUsage('setFormat'), /pandopia setFormat <json\|jsonl\|md>/);
   assert.match(
     renderTypes([{ type: 'diag', objectName: 'Diagnostic' }]),
     /Diagnostic/
   );
   assert.equal(
     renderParams({ filters: [], params: [] }),
-    'Filters:\nNo filters.\n\nParams:\nNo params.'
+    '## Filtres\n\nAucun filtre.\n\n## Paramètres\n\nAucun paramètre.'
   );
   assert.match(
     renderParams({
@@ -294,9 +307,9 @@ test('les helpers de format couvrent les variantes de rendu', () => {
   );
   assert.equal(
     renderPagination({ page: 2, perPage: 5, nbPages: 6, totalNb: 27 }),
-    'Page 2 / 6 | perPage 5 | total 27'
+    'Page 2 / 6 | par page 5 | total 27'
   );
-  assert.equal(renderHistory([]), 'No history.');
+  assert.equal(renderHistory([]), 'Aucun historique.');
   assert.match(
     renderHistory([
       {
@@ -310,12 +323,15 @@ test('les helpers de format couvrent les variantes de rendu', () => {
     /manuel/
   );
   assert.equal(
-    renderWhoIAm({ connected: false, server: DEFAULT_SERVER }),
-    `Connected: no\nServer: ${DEFAULT_SERVER}\nEmail: unknown\nOrganisation: unknown\nAPI key id: unknown`
+    renderWhoIAm({ connected: false, server: DEFAULT_SERVER, defaultFormat: 'md' }),
+    `## Statut\n\n- Connecté : non\n- Serveur : ${DEFAULT_SERVER}\n- Format par défaut : md\n- Email : inconnu\n- Organisation : inconnue\n- Identifiant de clé API : inconnu`
   );
   assert.equal(renderPrettyJson({ ok: true }), '{\n  "ok": true\n}');
-  assert.equal(renderJsonLines([]), 'No results.');
+  assert.equal(renderRecords([]), 'Aucun résultat.');
+  assert.equal(renderJsonLines([]), '');
   assert.equal(renderJsonLines([{ id: 1 }, { id: 2 }]), '{"id":1}\n{"id":2}');
+  assert.equal(renderJsonLines({ id: 1 }), '{"id":1}');
+  assert.equal(renderJsonLines(undefined), '');
 
   let buffer = '';
   writeLine(
@@ -428,6 +444,7 @@ test('SessionStore couvre les branches de sauvegarde, mise à jour et profil', a
   assert.deepEqual(await store.getStatus('test'), {
     server: 'https://test.pandopia.com',
     alias: 'test',
+    defaultFormat: 'md',
     email: 'admin@pandopia.com',
     userName: 'Admin',
     organismeRef: 'francehabitation',
@@ -887,6 +904,13 @@ test('parseArguments, version et runCli couvrent les branches CLI restantes', as
 
   {
     const runtime = createRuntime();
+    const exitCode = await runCli(['setFormat', 'xml'], runtime);
+    assert.equal(exitCode, 1);
+    assert.match(runtime.readStderr(), /pandopia setFormat <json\|jsonl\|md>/);
+  }
+
+  {
+    const runtime = createRuntime();
     const exitCode = await runCli(['--server', 'test'], runtime);
     assert.equal(exitCode, 1);
     assert.equal(
@@ -916,8 +940,31 @@ test('parseArguments, version et runCli couvrent les branches CLI restantes', as
     });
     const exitCode = await runCli(['login'], runtime);
     assert.equal(exitCode, 0);
-    assert.match(runtime.readStderr(), /Bad credentials\. Re-enter password/);
-    assert.match(runtime.readStdout(), /Logged in on https:\/\/app\.pandopia\.com as Admin\./);
+    assert.match(
+      runtime.readStderr(),
+      /Bad credentials\. Saisissez à nouveau le mot de passe/
+    );
+    assert.match(
+      runtime.readStdout(),
+      /Connecté sur https:\/\/app\.pandopia\.com en tant que Admin\./
+    );
+  }
+
+  {
+    const runtime = createRuntime();
+    const exitCode = await runCli(['status', '--json=false', '--jsonl=off', '--md=no'], runtime);
+    assert.equal(exitCode, 0);
+    assert.match(runtime.readStdout(), /## Statut/);
+  }
+
+  {
+    const runtime = createRuntime();
+    const exitCode = await runCli(['status', '--json', '--md'], runtime);
+    assert.equal(exitCode, 1);
+    assert.equal(
+      runtime.readStderr(),
+      'Choisissez un seul format parmi --json, --jsonl ou --md.\n'
+    );
   }
 
   {
@@ -1087,7 +1134,10 @@ test('parseArguments, version et runCli couvrent les branches CLI restantes', as
     });
     const exitCode = await runCli(['get', 'diag', '1'], runtime);
     assert.equal(exitCode, 0);
-    assert.equal(runtime.readStdout(), '{\n  "id": 1,\n  "label": "Diagnostic"\n}\n');
+    assert.equal(
+      runtime.readStdout(),
+      '| champ | valeur |\n| --- | --- |\n| id | 1 |\n| label | Diagnostic |\n'
+    );
   }
 
   {
@@ -1107,8 +1157,8 @@ test('parseArguments, version et runCli couvrent les branches CLI restantes', as
     const runtime = createRuntime();
     const exitCode = await runCli(['unknown-command'], runtime);
     assert.equal(exitCode, 1);
-    assert.match(runtime.readStderr(), /Unknown command: unknown-command/);
-    assert.match(runtime.readStderr(), /Pandopia Catalog CLI/);
+    assert.match(runtime.readStderr(), /Commande inconnue : unknown-command/);
+    assert.match(runtime.readStderr(), /CLI catalogue Pandopia/);
   }
 
   {
@@ -1173,9 +1223,9 @@ test('parseArguments, version et runCli couvrent les branches CLI restantes', as
     });
     const exitCode = await runCli(['whoiam'], runtime);
     assert.equal(exitCode, 0);
-    assert.match(runtime.readStdout(), /Email: api@example\.com/);
-    assert.match(runtime.readStdout(), /Organisation: saved-org/);
-    assert.match(runtime.readStdout(), /API key id: client-id/);
+    assert.match(runtime.readStdout(), /Email : api@example\.com/);
+    assert.match(runtime.readStdout(), /Organisation : saved-org/);
+    assert.match(runtime.readStdout(), /Identifiant de clé API : client-id/);
   }
 });
 

@@ -40,9 +40,11 @@ test('FileConfigStore reads defaults and persists normalized profiles', async ()
   const store = new FileConfigStore(configPath);
 
   assert.equal(await store.getActiveServer(), DEFAULT_SERVER);
+  assert.equal(await store.getDefaultFormat(), 'md');
   assert.equal(await store.getProfile(DEFAULT_SERVER), undefined);
 
   await store.setActiveServer('test');
+  await store.setDefaultFormat('jsonl');
   await store.upsertProfile('test', {
     email: 'admin@pandopia.com',
     userName: 'Admin',
@@ -50,11 +52,13 @@ test('FileConfigStore reads defaults and persists normalized profiles', async ()
 
   const raw = JSON.parse(await fs.readFile(configPath, 'utf8'));
   assert.equal(raw.activeServer, 'https://test.pandopia.com');
+  assert.equal(raw.defaultFormat, 'jsonl');
   assert.equal(
     raw.profiles['https://test.pandopia.com'].email,
     'admin@pandopia.com'
   );
   assert.ok(raw.profiles['https://test.pandopia.com'].updatedAt);
+  assert.equal(await store.getDefaultFormat(), 'jsonl');
   assert.deepEqual(await store.getProfile('test'), {
     email: 'admin@pandopia.com',
     userName: 'Admin',

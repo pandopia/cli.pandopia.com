@@ -1,4 +1,5 @@
 import type { ConfigStore, ProfileConfig } from './config';
+import type { OutputFormat } from './output-format';
 import type { SecretKey, SecretStore } from './secrets';
 import { getServerAlias, normalizeServerInput } from './servers';
 
@@ -23,6 +24,7 @@ export interface SessionAuthState {
 export interface SessionStatus {
   server: string;
   alias: string | null;
+  defaultFormat: OutputFormat;
   email?: string;
   userName?: string;
   organismeRef?: string;
@@ -45,15 +47,28 @@ export class SessionStore {
     return normalized;
   }
 
+  async getDefaultFormat(): Promise<OutputFormat> {
+    return this.configStore.getDefaultFormat();
+  }
+
+  async setDefaultFormat(format: OutputFormat): Promise<OutputFormat> {
+    await this.configStore.setDefaultFormat(format);
+    return this.configStore.getDefaultFormat();
+  }
+
   async getStatus(server?: string): Promise<SessionStatus> {
     const normalized = normalizeServerInput(
       server || (await this.configStore.getActiveServer())
     );
-    const profile = await this.configStore.getProfile(normalized);
-    const accessToken = await this.secretStore.get(normalized, 'access_token');
+    const [profile, accessToken, defaultFormat] = await Promise.all([
+      this.configStore.getProfile(normalized),
+      this.secretStore.get(normalized, 'access_token'),
+      this.configStore.getDefaultFormat(),
+    ]);
     return {
       server: normalized,
       alias: getServerAlias(normalized),
+      defaultFormat,
       email: profile?.email,
       userName: profile?.userName,
       organismeRef: profile?.organismeRef,

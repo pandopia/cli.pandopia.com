@@ -40,7 +40,7 @@ export class ApiError extends Error {
 }
 
 export class AuthRequiredError extends Error {
-  constructor(message = 'Run pandopia login <email>') {
+  constructor(message = 'Exécutez pandopia login <email>') {
     super(message);
     this.name = 'AuthRequiredError';
   }

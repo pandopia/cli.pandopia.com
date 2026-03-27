@@ -18,6 +18,7 @@ npm install -g .
 pandopia
 pandopia --version
 pandopia setServer test
+pandopia setFormat md
 pandopia login cyril.bele@gmail.com
 pandopia status
 pandopia types
@@ -50,6 +51,25 @@ Valeurs de serveur acceptées :
 
 Le serveur actif est enregistré dans `~/.config/pandopia/config.json` et toutes les commandes utilisent ensuite ce serveur.
 
+## Format de sortie
+
+Par défaut, la CLI rend les commandes de lecture au format Markdown (`md`).
+
+Vous pouvez :
+
+- forcer un format ponctuellement avec `--md`, `--json` ou `--jsonl`
+- définir le format par défaut avec `pandopia setFormat <md|json|jsonl>`
+- vérifier le format courant avec `pandopia status`
+
+Exemples :
+
+```bash
+pandopia types --json
+pandopia list diag_dpereglementaire --jsonl
+pandopia get diag_dpereglementaire 1235 --md
+pandopia setFormat jsonl
+```
+
 ## Authentification
 
 `pandopia login` pour vous identifier avec votre login et mot de passe.
@@ -76,9 +96,13 @@ Supprime le profil du serveur actif et les secrets associés.
 
 Définit le serveur actif sans nécessiter de login.
 
+### `pandopia setFormat <format>`
+
+Définit le format de sortie par défaut. Valeurs acceptées : `md`, `json`, `jsonl`.
+
 ### `pandopia whoiam`
 
-Indique si la CLI est connectée, le serveur actuellement visé, l'email, la référence d'organisation et l'identifiant de clé API.
+Indique si la CLI est connectée, le serveur actuellement visé, le format de sortie par défaut, l'email, la référence d'organisation et l'identifiant de clé API.
 
 ### `pandopia status`
 
@@ -96,11 +120,13 @@ Affiche les filtres et paramètres d'un type de catalogue.
 
 Options réservées :
 
+- `--md`
 - `--page`
 - `--per-page`
 - `--search`
 - `--params`
 - `--json`
+- `--jsonl`
 
 Toute autre option `--key value` ou `--KEY=value` est transmise telle quelle à la query string de l'API.
 
@@ -123,11 +149,11 @@ pandopia find diag_dpereglementaire "lmh"
 
 ### `pandopia get <catalogType> <objectId>`
 
-Récupère un objet. Prend en charge `--params` et `--json`.
+Récupère un objet. Prend en charge `--params`, `--md`, `--json` et `--jsonl`.
 
 ### `pandopia history <catalogType> <objectId> <paramCode>`
 
-Récupère l'historique d'un paramètre pour un objet.
+Récupère l'historique d'un paramètre pour un objet. Prend en charge `--md`, `--json` et `--jsonl`.
 
 ## Licence
 

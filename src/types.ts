@@ -1,3 +1,5 @@
+import type { OutputFormat } from './output-format';
+
 export interface CatalogType {
   type: string;
   objectName: string;
@@ -98,6 +100,7 @@ export interface WhoIAmResponse {
 export interface WhoIAmSummary {
   connected: boolean;
   server: string;
+  defaultFormat: OutputFormat;
   email?: string;
   organismeRef?: string;
   apiKeyId?: string;

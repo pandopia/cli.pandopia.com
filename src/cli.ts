@@ -1,6 +1,11 @@
 import type { WhoIAmResponse, WhoIAmSummary, WriterLike } from './types';
 import { FileConfigStore } from './config';
 import { createSecretStore } from './secrets';
+import {
+  DEFAULT_OUTPUT_FORMAT,
+  isOutputFormat,
+  type OutputFormat,
+} from './output-format';
 import { SessionStore, type SessionAuthState } from './session';
 import { TerminalPrompt, type Prompt } from './prompt';
 import { PandopiaApiClient, ApiError, AuthRequiredError, type FetchLike } from './api';
@@ -12,6 +17,8 @@ import {
   renderPagination,
   renderParams,
   renderPrettyJson,
+  renderRecord,
+  renderRecords,
   renderRootHelp,
   renderTypes,
   renderWhoIAm,
@@ -33,10 +40,27 @@ export interface CliDependencies {
   apiClient: PandopiaApiClient;
 }
 
+const RESERVED_FLAG_TYPES = {
+  json: 'boolean',
+  jsonl: 'boolean',
+  md: 'boolean',
+  server: 'value',
+  page: 'value',
+  'per-page': 'value',
+  search: 'value',
+  params: 'value',
+  version: 'boolean',
+} as const;
+
+type ReservedFlagName = keyof typeof RESERVED_FLAG_TYPES;
+
 function isReservedFlag(name: string): boolean {
-  return ['json', 'server', 'page', 'per-page', 'search', 'params', 'version'].includes(
-    name.toLowerCase()
-  );
+  return name.toLowerCase() in RESERVED_FLAG_TYPES;
+}
+
+function expectsReservedFlagValue(name: string): boolean {
+  const key = name.toLowerCase() as ReservedFlagName;
+  return RESERVED_FLAG_TYPES[key] === 'value';
 }
 
 function addQueryValue(
@@ -68,14 +92,20 @@ export function parseArguments(argv: string[]): ParsedArguments {
       equalsIndex >= 0 ? withoutPrefix.slice(0, equalsIndex) : withoutPrefix;
     const inlineValue =
       equalsIndex >= 0 ? withoutPrefix.slice(equalsIndex + 1) : undefined;
+    const reservedFlag = isReservedFlag(rawKey);
 
     let value = inlineValue;
-    if (value === undefined && argv[index + 1] && !argv[index + 1].startsWith('--')) {
+    if (
+      value === undefined &&
+      argv[index + 1] &&
+      !argv[index + 1].startsWith('--') &&
+      (!reservedFlag || expectsReservedFlagValue(rawKey))
+    ) {
       value = argv[index + 1];
       index += 1;
     }
 
-    if (isReservedFlag(rawKey)) {
+    if (reservedFlag) {
       reserved[rawKey.toLowerCase()] = value === undefined ? true : value;
       continue;
     }
@@ -119,8 +149,56 @@ async function resolveServer(sessionStore: SessionStore): Promise<string> {
   return sessionStore.getActiveServer();
 }
 
-function shouldRenderJson(parsed: ParsedArguments): boolean {
-  return parsed.reserved.json === true || parsed.reserved.json === 'true';
+function isFlagEnabled(value: string | boolean | undefined): boolean {
+  if (value === true) {
+    return true;
+  }
+
+  if (typeof value === 'string') {
+    return !['false', '0', 'no', 'off'].includes(value.toLowerCase());
+  }
+
+  return false;
+}
+
+function getExplicitOutputFormat(parsed: ParsedArguments): OutputFormat | undefined {
+  const requested = ([
+    ['json', 'json'],
+    ['jsonl', 'jsonl'],
+    ['md', 'md'],
+  ] as const)
+    .filter(([flag]) => isFlagEnabled(parsed.reserved[flag]))
+    .map(([, format]) => format);
+
+  if (requested.length > 1) {
+    throw new Error('Choisissez un seul format parmi --json, --jsonl ou --md.');
+  }
+
+  return requested[0];
+}
+
+async function resolveOutputFormat(
+  parsed: ParsedArguments,
+  sessionStore: SessionStore
+): Promise<OutputFormat> {
+  return getExplicitOutputFormat(parsed) || sessionStore.getDefaultFormat();
+}
+
+function renderOutput(input: {
+  format: OutputFormat;
+  markdown: string;
+  jsonValue: unknown;
+  jsonlValue?: unknown;
+}): string {
+  switch (input.format) {
+    case 'json':
+      return renderPrettyJson(input.jsonValue);
+    case 'jsonl':
+      return renderJsonLines(input.jsonlValue ?? input.jsonValue);
+    case 'md':
+    default:
+      return input.markdown;
+  }
 }
 
 function createDefaultFetch(): FetchLike {
@@ -194,12 +272,14 @@ function findFirstScalar(
 function buildWhoIAmSummary(input: {
   connected: boolean;
   server: string;
+  defaultFormat: OutputFormat;
   authState: SessionAuthState;
   payload?: WhoIAmResponse;
 }): WhoIAmSummary {
   return {
     connected: input.connected,
     server: normalizeServerInput(input.server),
+    defaultFormat: input.defaultFormat,
     email:
       findFirstScalar(input.payload, ['email', 'mail']) || input.authState.email,
     organismeRef:
@@ -227,6 +307,7 @@ function buildWhoIAmJsonOutput(
     return {
       connected: summary.connected,
       server: summary.server,
+      defaultFormat: summary.defaultFormat,
       email: summary.email,
       organismeRef: summary.organismeRef,
       apiKeyId: summary.apiKeyId,
@@ -237,6 +318,7 @@ function buildWhoIAmJsonOutput(
     ...payload,
     connected: summary.connected,
     server: summary.server,
+    defaultFormat: summary.defaultFormat,
   };
 }
 
@@ -294,12 +376,15 @@ async function runLogin(
       const result = await deps.apiClient.login(server, email, password, deps.prompt);
       writeLine(
         deps.stdout,
-        `Logged in on ${result.server}${result.userName ? ` as ${result.userName}` : ''}.`
+        `Connecté sur ${result.server}${result.userName ? ` en tant que ${result.userName}` : ''}.`
       );
       return 0;
     } catch (error) {
       if (isInvalidLoginError(error)) {
-        writeLine(deps.stderr, `${(error as ApiError).message}. Re-enter password or press Ctrl+C to cancel.`);
+        writeLine(
+          deps.stderr,
+          `${(error as ApiError).message}. Saisissez à nouveau le mot de passe ou appuyez sur Ctrl+C pour annuler.`
+        );
         continue;
       }
       throw error;
@@ -313,9 +398,15 @@ async function runTypes(
 ): Promise<number> {
   const server = await resolveServer(deps.sessionStore);
   const payload = await deps.apiClient.listTypes(server);
+  const format = await resolveOutputFormat(parsed, deps.sessionStore);
   writeLine(
     deps.stdout,
-    shouldRenderJson(parsed) ? renderPrettyJson(payload) : renderTypes(payload.data)
+    renderOutput({
+      format,
+      markdown: renderTypes(payload.data),
+      jsonValue: payload,
+      jsonlValue: payload.data,
+    })
   );
   return 0;
 }
@@ -326,6 +417,7 @@ async function runWhoIAm(
 ): Promise<number> {
   const server = await resolveServer(deps.sessionStore);
   const authState = await deps.sessionStore.getAuthState(server);
+  const defaultFormat = await deps.sessionStore.getDefaultFormat();
   let connected = !!authState.accessToken;
   let payload: WhoIAmResponse | undefined;
 
@@ -346,14 +438,18 @@ async function runWhoIAm(
   const summary = buildWhoIAmSummary({
     connected,
     server,
+    defaultFormat,
     authState,
     payload,
   });
+  const format = await resolveOutputFormat(parsed, deps.sessionStore);
   writeLine(
     deps.stdout,
-    shouldRenderJson(parsed)
-      ? renderPrettyJson(buildWhoIAmJsonOutput(summary, payload))
-      : renderWhoIAm(summary)
+    renderOutput({
+      format,
+      markdown: renderWhoIAm(summary),
+      jsonValue: buildWhoIAmJsonOutput(summary, payload),
+    })
   );
   return 0;
 }
@@ -369,7 +465,40 @@ async function runSetServer(
   }
 
   const server = await deps.sessionStore.setActiveServer(serverInput);
-  writeLine(deps.stdout, `Serveur actif défini sur ${server}.`);
+  const format = await resolveOutputFormat(parsed, deps.sessionStore);
+  writeLine(
+    deps.stdout,
+    renderOutput({
+      format,
+      markdown: `Serveur actif défini sur ${server}.`,
+      jsonValue: { status: 'ok', server },
+    })
+  );
+  return 0;
+}
+
+async function runSetFormat(
+  parsed: ParsedArguments,
+  deps: CliDependencies
+): Promise<number> {
+  const formatInput = parsed.positionals[1] || getExplicitOutputFormat(parsed);
+  if (!formatInput || !isOutputFormat(formatInput)) {
+    writeLine(deps.stderr, renderCommandUsage('setFormat'));
+    return 1;
+  }
+
+  const defaultFormat = await deps.sessionStore.setDefaultFormat(
+    formatInput || DEFAULT_OUTPUT_FORMAT
+  );
+  const effectiveFormat = getExplicitOutputFormat(parsed) || DEFAULT_OUTPUT_FORMAT;
+  writeLine(
+    deps.stdout,
+    renderOutput({
+      format: effectiveFormat,
+      markdown: `Format par défaut défini sur ${defaultFormat}.`,
+      jsonValue: { status: 'ok', defaultFormat },
+    })
+  );
   return 0;
 }
 
@@ -385,9 +514,15 @@ async function runParams(
 
   const server = await resolveServer(deps.sessionStore);
   const payload = await deps.apiClient.getParams(server, catalogType);
+  const format = await resolveOutputFormat(parsed, deps.sessionStore);
   writeLine(
     deps.stdout,
-    shouldRenderJson(parsed) ? renderPrettyJson(payload) : renderParams(payload.data)
+    renderOutput({
+      format,
+      markdown: renderParams(payload.data),
+      jsonValue: payload,
+      jsonlValue: payload.data,
+    })
   );
   return 0;
 }
@@ -408,15 +543,16 @@ async function runList(
     catalogType,
     buildListQuery(parsed)
   );
-
-  if (shouldRenderJson(parsed)) {
-    writeLine(deps.stdout, renderPrettyJson(payload));
-    return 0;
-  }
-
-  writeLine(deps.stdout, renderPagination(payload.pagination));
-  writeLine(deps.stdout);
-  writeLine(deps.stdout, renderJsonLines(payload.data));
+  const format = await resolveOutputFormat(parsed, deps.sessionStore);
+  writeLine(
+    deps.stdout,
+    renderOutput({
+      format,
+      markdown: [renderPagination(payload.pagination), '', renderRecords(payload.data)].join('\n'),
+      jsonValue: payload,
+      jsonlValue: payload.data,
+    })
+  );
   return 0;
 }
 
@@ -461,9 +597,15 @@ async function runGet(
     objectId,
     buildGetQuery(parsed)
   );
+  const format = await resolveOutputFormat(parsed, deps.sessionStore);
   writeLine(
     deps.stdout,
-    shouldRenderJson(parsed) ? renderPrettyJson(payload) : renderPrettyJson(payload.data)
+    renderOutput({
+      format,
+      markdown: renderRecord(payload.data),
+      jsonValue: payload,
+      jsonlValue: payload.data,
+    })
   );
   return 0;
 }
@@ -487,9 +629,15 @@ async function runHistory(
     objectId,
     paramCode
   );
+  const format = await resolveOutputFormat(parsed, deps.sessionStore);
   writeLine(
     deps.stdout,
-    shouldRenderJson(parsed) ? renderPrettyJson(payload) : renderHistory(payload.data)
+    renderOutput({
+      format,
+      markdown: renderHistory(payload.data),
+      jsonValue: payload,
+      jsonlValue: payload.data,
+    })
   );
   return 0;
 }
@@ -500,7 +648,16 @@ async function runLogout(
 ): Promise<number> {
   const server = await resolveServer(deps.sessionStore);
   await deps.apiClient.logout(server);
-  writeLine(deps.stdout, `Cleared credentials for ${normalizeServerInput(server)}.`);
+  const normalizedServer = normalizeServerInput(server);
+  const format = await resolveOutputFormat(parsed, deps.sessionStore);
+  writeLine(
+    deps.stdout,
+    renderOutput({
+      format,
+      markdown: `Identifiants supprimés pour ${normalizedServer}.`,
+      jsonValue: { status: 'ok', server: normalizedServer },
+    })
+  );
   return 0;
 }
 
@@ -534,7 +691,7 @@ export async function runCli(
       return 1;
     }
 
-    if (parsed.reserved.version === true || parsed.reserved.version === 'true') {
+    if (isFlagEnabled(parsed.reserved.version)) {
       writeLine(deps.stdout, await getCliVersion());
       return 0;
     }
@@ -545,37 +702,41 @@ export async function runCli(
       return 0;
     }
 
-        switch (command) {
-            case 'setServer':
-            case 'setserver':
-            case 'set-server':
-                return await runSetServer(parsed, deps);
-            case 'login':
-                return await runLogin(parsed, deps);
-            case 'logout':
-                return await runLogout(parsed, deps);
-            case 'whoiam':
-            case 'whoami':
-            case 'status':
-                return await runWhoIAm(parsed, deps);
-            case 'types':
-                return await runTypes(parsed, deps);
-            case 'params':
-                return await runParams(parsed, deps);
-            case 'list':
-                return await runList(parsed, deps);
-            case 'find':
-                return await runFind(parsed, deps);
-            case 'get':
-                return await runGet(parsed, deps);
-            case 'history':
-                return await runHistory(parsed, deps);
-            case 'version':
-                writeLine(deps.stdout, await getCliVersion());
-                return 0;
-            default:
-                writeLine(deps.stderr, `Unknown command: ${command}`);
-                writeLine(deps.stderr);
+    switch (command) {
+      case 'setServer':
+      case 'setserver':
+      case 'set-server':
+        return await runSetServer(parsed, deps);
+      case 'setFormat':
+      case 'setformat':
+      case 'set-format':
+        return await runSetFormat(parsed, deps);
+      case 'login':
+        return await runLogin(parsed, deps);
+      case 'logout':
+        return await runLogout(parsed, deps);
+      case 'whoiam':
+      case 'whoami':
+      case 'status':
+        return await runWhoIAm(parsed, deps);
+      case 'types':
+        return await runTypes(parsed, deps);
+      case 'params':
+        return await runParams(parsed, deps);
+      case 'list':
+        return await runList(parsed, deps);
+      case 'find':
+        return await runFind(parsed, deps);
+      case 'get':
+        return await runGet(parsed, deps);
+      case 'history':
+        return await runHistory(parsed, deps);
+      case 'version':
+        writeLine(deps.stdout, await getCliVersion());
+        return 0;
+      default:
+        writeLine(deps.stderr, `Commande inconnue : ${command}`);
+        writeLine(deps.stderr);
         writeLine(deps.stderr, renderRootHelp(await deps.sessionStore.getStatus()));
         return 1;
     }
