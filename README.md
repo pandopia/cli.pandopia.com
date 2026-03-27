@@ -163,9 +163,13 @@ Ce projet est distribué sous licence MIT. Vous pouvez l'utiliser, le modifier, 
 
 Le dépôt contient un workflow GitHub Actions qui publie automatiquement le package sur npm à chaque `push` sur la branche `main`, uniquement si la version courante de `package.json` n'existe pas encore sur npm.
 
-Configuration requise :
+La publication repose sur npm Trusted Publishing via OpenID Connect (OIDC). Aucune injection de `NPM_TOKEN` n'est nécessaire pour `npm publish`.
 
-- ajouter le secret GitHub `NPM_TOKEN` avec un token npm autorisé à publier `@pandopia/cli`
+Points de configuration à vérifier sur npmjs.com :
+
+- le package `@pandopia/cli` doit être relié au dépôt GitHub `pandopia/cli.pandopia.com`
+- le workflow déclaré côté npm doit être `publish.yml`
+- le workflow GitHub doit disposer de la permission `id-token: write`
 
 Commandes utiles :
 
