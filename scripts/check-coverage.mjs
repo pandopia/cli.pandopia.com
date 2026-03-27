@@ -1,5 +1,6 @@
 import { spawn } from 'node:child_process';
 import { readFile } from 'node:fs/promises';
+import { extractCoverageFiles } from './coverage-parser.mjs';
 
 const packageJson = JSON.parse(
   await readFile(new URL('../package.json', import.meta.url), 'utf8')
@@ -39,17 +40,7 @@ if (exitCode !== 0) {
   process.exit(exitCode ?? 1);
 }
 
-const files = [...combinedOutput.matchAll(/^#\s+(.+?)\s+\|\s+([\d.]+)\s+\|/gm)]
-  .map(([, file, lineCoverage]) => ({
-    file: file.trim(),
-    lineCoverage: Number.parseFloat(lineCoverage),
-  }))
-  .filter(
-    ({ file, lineCoverage }) =>
-      file !== 'all files' &&
-      !file.startsWith('test/') &&
-      Number.isFinite(lineCoverage)
-  );
+const files = extractCoverageFiles(combinedOutput);
 
 if (files.length === 0) {
   console.error("Impossible d'analyser le rapport de couverture.");
