@@ -99,6 +99,7 @@ export function renderRootHelp(status: SessionStatus): string {
     '  pandopia find <catalogType> <text> [flags]  Alias de list --search',
     '  pandopia get <catalogType> <objectId> [flags]  Récupère un objet du catalogue',
     '  pandopia history <catalogType> <objectId> <paramCode> [flags]  Affiche un historique',
+    '  pandopia logs [flags]                       Recherche dans les logs backend',
     '',
     'Exemples :',
     '  pandopia --version',
@@ -112,11 +113,20 @@ export function renderRootHelp(status: SessionStatus): string {
     '  pandopia find diag_dpereglementaire "lmh"',
     '  pandopia get diag_dpereglementaire 1235',
     '  pandopia history diag_dpereglementaire 1235 DIAG_STATUS',
+    '  pandopia logs --date 2026-04-29 --log-level error --search timeout',
   ].join('\n');
 }
 
 export function renderCommandUsage(
-  command: 'list' | 'find' | 'get' | 'params' | 'history' | 'setServer' | 'setFormat'
+  command:
+    | 'list'
+    | 'find'
+    | 'get'
+    | 'params'
+    | 'history'
+    | 'logs'
+    | 'setServer'
+    | 'setFormat'
 ): string {
   if (command === 'setServer') {
     return [
@@ -194,6 +204,19 @@ export function renderCommandUsage(
       '',
       'Astuce :',
       '  Utilisez pandopia params <catalogType> pour découvrir les paramètres disponibles.',
+    ].join('\n');
+  }
+
+  if (command === 'logs') {
+    return [
+      'Usage :',
+      '  pandopia logs [--date YYYY-MM-DD] [--page N] [--per-page N] [--search TEXT] [--session-id ID] [--log-level LEVEL] [--file-type TYPE] [--json|--jsonl|--md]',
+      '',
+      'Exemple :',
+      '  pandopia logs --date 2026-04-29 --log-level error --search timeout',
+      '',
+      'Astuce :',
+      '  Les options spécifiques sont transmises telles quelles à l’API.',
     ].join('\n');
   }
 

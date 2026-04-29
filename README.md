@@ -27,6 +27,7 @@ pandopia list diag_dpereglementaire --DIAG_STATUS=valide --organismeRef=lmh_6
 pandopia find diag_dpereglementaire "lmh"
 pandopia get diag_dpereglementaire 1235
 pandopia history diag_dpereglementaire 1235 DIAG_STATUS
+pandopia logs --date 2026-04-29 --log-level error --search timeout
 ```
 
 ## Sélection du serveur
@@ -154,6 +155,34 @@ Récupère un objet. Prend en charge `--params`, `--md`, `--json` et `--jsonl`.
 ### `pandopia history <catalogType> <objectId> <paramCode>`
 
 Récupère l'historique d'un paramètre pour un objet. Prend en charge `--md`, `--json` et `--jsonl`.
+
+### `pandopia logs [flags]`
+
+Recherche dans les logs backend.
+
+Options réservées :
+
+- `--md`
+- `--page`
+- `--per-page`
+- `--search`
+- `--json`
+- `--jsonl`
+
+Options spécifiques prises en charge :
+
+- `--date YYYY-MM-DD`
+- `--session-id ID`
+- `--log-level LEVEL`
+- `--file-type TYPE`
+
+Exemples :
+
+```bash
+pandopia logs --date 2026-04-29
+pandopia logs --page 2 --per-page 100 --search timeout
+pandopia logs --session-id abc123 --log-level error --file-type pdf
+```
 
 ## Licence
 

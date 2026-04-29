@@ -642,6 +642,25 @@ async function runHistory(
   return 0;
 }
 
+async function runLogs(
+  parsed: ParsedArguments,
+  deps: CliDependencies
+): Promise<number> {
+  const server = await resolveServer(deps.sessionStore);
+  const payload = await deps.apiClient.listLogs(server, buildListQuery(parsed));
+  const format = await resolveOutputFormat(parsed, deps.sessionStore);
+  writeLine(
+    deps.stdout,
+    renderOutput({
+      format,
+      markdown: [renderPagination(payload.pagination), '', renderRecords(payload.data)].join('\n'),
+      jsonValue: payload,
+      jsonlValue: payload.data,
+    })
+  );
+  return 0;
+}
+
 async function runLogout(
   parsed: ParsedArguments,
   deps: CliDependencies
@@ -731,6 +750,8 @@ export async function runCli(
         return await runGet(parsed, deps);
       case 'history':
         return await runHistory(parsed, deps);
+      case 'logs':
+        return await runLogs(parsed, deps);
       case 'version':
         writeLine(deps.stdout, await getCliVersion());
         return 0;

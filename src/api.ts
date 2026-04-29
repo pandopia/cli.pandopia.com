@@ -341,6 +341,13 @@ export class PandopiaApiClient {
     );
   }
 
+  async listLogs(
+    server: string,
+    query: Record<string, string[]>
+  ): Promise<CatalogListResponse> {
+    return this.requestCatalog<CatalogListResponse>(server, '/logs', query);
+  }
+
   async getWhoIAm(server: string): Promise<WhoIAmResponse> {
     return this.requestAuth<WhoIAmResponse>(server, '/whoiam');
   }

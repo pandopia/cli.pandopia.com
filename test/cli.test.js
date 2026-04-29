@@ -174,6 +174,7 @@ test('pandopia with no args shows help and status', async () => {
   assert.match(runtime.readStdout(), /pandopia history <catalogType> <objectId> <paramCode>/);
   assert.match(runtime.readStdout(), /pandopia --version/);
   assert.match(runtime.readStdout(), /pandopia find <catalogType> <text> \[flags\]/);
+  assert.match(runtime.readStdout(), /pandopia logs \[flags\]/);
 });
 
 test('missing args show usage for list, get, and params', async () => {
@@ -211,6 +212,64 @@ test('missing args show usage for list, get, and params', async () => {
     assert.equal(exitCode, 1);
     assert.match(runtime.readStderr(), /pandopia find <catalogType> <text>/);
   }
+});
+
+test('logs forwards reserved and passthrough query params', async () => {
+  const runtime = createRuntime({
+    fetchImpl: async (url) => {
+      assert.match(
+        url,
+        /\/api\/catalog\/logs\?date=2026-04-29&session-id=abc123&log-level=error&file-type=pdf&page=2&perPage=50&search=timeout/
+      );
+      return createResponse(200, {
+        status: 'ok',
+        pagination: { page: 2, perPage: 50, nbPages: 3, totalNb: 120 },
+        data: [
+          {
+            date: '2026-04-29',
+            sessionId: 'abc123',
+            level: 'error',
+            fileType: 'pdf',
+            message: 'timeout',
+          },
+        ],
+      });
+    },
+  });
+
+  await runtime.sessionStore.saveLogin(DEFAULT_SERVER, {
+    email: 'admin@pandopia.com',
+    accessToken: 'access-token',
+    refreshToken: 'refresh-token',
+    clientId: 'client-id',
+    clientSecret: 'client-secret',
+  });
+
+  const exitCode = await runCli(
+    [
+      'logs',
+      '--date',
+      '2026-04-29',
+      '--session-id',
+      'abc123',
+      '--page',
+      '2',
+      '--per-page',
+      '50',
+      '--search',
+      'timeout',
+      '--log-level',
+      'error',
+      '--file-type',
+      'pdf',
+    ],
+    runtime
+  );
+
+  assert.equal(exitCode, 0);
+  assert.match(runtime.readStdout(), /Page 2 \/ 3 \| par page 50 \| total 120/);
+  assert.match(runtime.readStdout(), /\| date \| sessionId \| level \| fileType \| message \|/);
+  assert.match(runtime.readStdout(), /\| 2026-04-29 \| abc123 \| error \| pdf \| timeout \|/);
 });
 
 test('--version and version print the package version', async () => {
