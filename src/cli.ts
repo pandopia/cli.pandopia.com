@@ -646,8 +646,53 @@ async function runLogs(
   parsed: ParsedArguments,
   deps: CliDependencies
 ): Promise<number> {
+  const query = buildListQuery(parsed);
+  const search = query.search?.[0]?.trim();
+  const message = query.message?.[0]?.trim();
+  const sessionId = query['session-id']?.[0]?.trim();
+  const logCode = query['log-code']?.[0]?.trim();
+  const hasAnyFilter = Object.keys(query).length > 0;
+  const hasPreciseFilter =
+    (search && search.length >= 3) ||
+    (message && message.length >= 3) ||
+    (sessionId && sessionId.length >= 4) ||
+    (logCode && /^[1-9]\d*$/.test(logCode));
+
+  if (!hasAnyFilter) {
+    writeLine(deps.stdout, renderCommandUsage('logs'));
+    return 0;
+  }
+
+  if (search !== undefined && search.length < 3) {
+    writeLine(deps.stderr, 'Le filtre --search doit contenir au moins 3 caractères.');
+    return 1;
+  }
+
+  if (message !== undefined && message.length < 3) {
+    writeLine(deps.stderr, 'Le filtre --message doit contenir au moins 3 caractères.');
+    return 1;
+  }
+
+  if (sessionId !== undefined && sessionId.length < 4) {
+    writeLine(deps.stderr, 'Le filtre --session-id doit contenir au moins 4 caractères.');
+    return 1;
+  }
+
+  if (logCode !== undefined && !/^[1-9]\d*$/.test(logCode)) {
+    writeLine(deps.stderr, 'Le filtre --log-code doit être un entier strictement positif.');
+    return 1;
+  }
+
+  if (!hasPreciseFilter) {
+    writeLine(
+      deps.stderr,
+      'Recherche logs trop large: ajoutez au moins un filtre précis (--search, --message, --session-id ou --log-code).'
+    );
+    return 1;
+  }
+
   const server = await resolveServer(deps.sessionStore);
-  const payload = await deps.apiClient.listLogs(server, buildListQuery(parsed));
+  const payload = await deps.apiClient.listLogs(server, query);
   const format = await resolveOutputFormat(parsed, deps.sessionStore);
   writeLine(
     deps.stdout,

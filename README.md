@@ -27,7 +27,7 @@ pandopia list diag_dpereglementaire --DIAG_STATUS=valide --organismeRef=lmh_6
 pandopia find diag_dpereglementaire "lmh"
 pandopia get diag_dpereglementaire 1235
 pandopia history diag_dpereglementaire 1235 DIAG_STATUS
-pandopia logs --date 2026-04-29 --log-level error --search timeout
+pandopia logs --date 2026-04-29 --log-level ERR --search "SQL"
 ```
 
 ## Sélection du serveur
@@ -158,7 +158,14 @@ Récupère l'historique d'un paramètre pour un objet. Prend en charge `--md`, `
 
 ### `pandopia logs [flags]`
 
-Recherche dans les logs backend.
+Recherche dans les logs de production.
+
+Si vous exécutez `pandopia logs` sans option, la CLI affiche le récapitulatif des paramètres au lieu d'interroger l'API.
+
+Règle de sécurité :
+
+- ajoutez au moins un filtre précis parmi `--search`, `--message`, `--session-id` ou `--log-code`
+- les filtres `--date`, `--file-type`, `--log-level` et `--environment` seuls sont refusés pour éviter de saturer la lecture des logs
 
 Options réservées :
 
@@ -171,17 +178,23 @@ Options réservées :
 
 Options spécifiques prises en charge :
 
-- `--date YYYY-MM-DD`
+- `--date YYYY-MM-DD` ou `DD/MM/YYYY`
+- `--search TEXT`
+- `--message TEXT`
 - `--session-id ID`
+- `--log-code N`
 - `--log-level LEVEL`
 - `--file-type TYPE`
+- `--environment ENV`
 
 Exemples :
 
 ```bash
-pandopia logs --date 2026-04-29
-pandopia logs --page 2 --per-page 100 --search timeout
-pandopia logs --session-id abc123 --log-level error --file-type pdf
+pandopia logs
+pandopia logs --search "SQLSTATE"
+pandopia logs --session-id abcdef12
+pandopia logs --log-code 3
+pandopia logs --date 2026-04-29 --log-level ERR --search "SQL"
 ```
 
 ## Licence

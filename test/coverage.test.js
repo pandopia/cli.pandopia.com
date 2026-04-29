@@ -278,7 +278,9 @@ test('les helpers de format couvrent les variantes de rendu', () => {
   assert.match(renderCommandUsage('find'), /pandopia find <catalogType> <text>/);
   assert.match(renderCommandUsage('get'), /pandopia get <catalogType> <objectId>/);
   assert.match(renderCommandUsage('history'), /pandopia history <catalogType> <objectId> <paramCode>/);
-  assert.match(renderCommandUsage('logs'), /pandopia logs \[--date YYYY-MM-DD\]/);
+  assert.match(renderCommandUsage('logs'), /# Logs production/);
+  assert.match(renderCommandUsage('logs'), /--message TEXT/);
+  assert.match(renderCommandUsage('logs'), /--log-code N/);
   assert.match(renderCommandUsage('params'), /pandopia params <catalogType>/);
   assert.match(renderCommandUsage('setServer'), /pandopia setServer <serveur>/);
   assert.match(renderCommandUsage('setFormat'), /pandopia setFormat <json\|jsonl\|md>/);

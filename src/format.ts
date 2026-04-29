@@ -99,7 +99,7 @@ export function renderRootHelp(status: SessionStatus): string {
     '  pandopia find <catalogType> <text> [flags]  Alias de list --search',
     '  pandopia get <catalogType> <objectId> [flags]  Récupère un objet du catalogue',
     '  pandopia history <catalogType> <objectId> <paramCode> [flags]  Affiche un historique',
-    '  pandopia logs [flags]                       Recherche dans les logs backend',
+    '  pandopia logs [flags]                       Recherche dans les logs de production',
     '',
     'Exemples :',
     '  pandopia --version',
@@ -113,7 +113,7 @@ export function renderRootHelp(status: SessionStatus): string {
     '  pandopia find diag_dpereglementaire "lmh"',
     '  pandopia get diag_dpereglementaire 1235',
     '  pandopia history diag_dpereglementaire 1235 DIAG_STATUS',
-    '  pandopia logs --date 2026-04-29 --log-level error --search timeout',
+    '  pandopia logs --date 2026-04-29 --log-level ERR --search "SQL"',
   ].join('\n');
 }
 
@@ -209,14 +209,32 @@ export function renderCommandUsage(
 
   if (command === 'logs') {
     return [
+      '# Logs production',
+      '',
       'Usage :',
-      '  pandopia logs [--date YYYY-MM-DD] [--page N] [--per-page N] [--search TEXT] [--session-id ID] [--log-level LEVEL] [--file-type TYPE] [--json|--jsonl|--md]',
+      '  pandopia logs [--date YYYY-MM-DD] [--page N] [--per-page N] [--search TEXT] [--session-id ID] [--log-level LEVEL] [--file-type TYPE] [--environment ENV] [--message TEXT] [--log-code N] [--json|--jsonl|--md]',
       '',
-      'Exemple :',
-      '  pandopia logs --date 2026-04-29 --log-level error --search timeout',
+      'Règle de sécurité :',
+      '  Ajoutez au moins un filtre précis parmi --search, --message, --session-id ou --log-code.',
+      '  Les filtres --date, --file-type, --log-level et --environment seuls sont refusés pour éviter de saturer la lecture des logs.',
       '',
-      'Astuce :',
-      '  Les options spécifiques sont transmises telles quelles à l’API.',
+      'Paramètres :',
+      '  --date YYYY-MM-DD ou DD/MM/YYYY   Date des logs, défaut aujourd\'hui',
+      '  --search TEXT                     Recherche dans message, environnement, session ou niveau, minimum 3 caractères',
+      '  --message TEXT                    Recherche limitée au message, minimum 3 caractères',
+      '  --session-id ID                   Filtre exact sur le Session ID, minimum 4 caractères',
+      '  --log-code N                      Filtre exact sur le code numérique du log, valeur positive',
+      '  --log-level LEVEL                 Niveau parmi INFO, NOTICE, WARN, ERR, CRIT, EMERG, ALERT',
+      '  --file-type TYPE                  Type parmi prod, backup, backup2, backup3',
+      '  --environment ENV                 Environnement exact',
+      '  --page N                          Page de résultats, défaut 1, max 20',
+      '  --per-page N                      Nombre de résultats par page, défaut 20, max 50',
+      '',
+      'Exemples :',
+      '  pandopia logs --search "SQLSTATE"',
+      '  pandopia logs --session-id abcdef12',
+      '  pandopia logs --log-code 3',
+      '  pandopia logs --date 2026-04-29 --log-level ERR --search "SQL"',
     ].join('\n');
   }
 

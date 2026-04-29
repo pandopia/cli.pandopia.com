@@ -272,6 +272,71 @@ test('logs forwards reserved and passthrough query params', async () => {
   assert.match(runtime.readStdout(), /\| 2026-04-29 \| abc123 \| error \| pdf \| timeout \|/);
 });
 
+test('logs without filters shows the parameter recap and does not call the API', async () => {
+  const runtime = createRuntime();
+
+  const exitCode = await runCli(['logs'], runtime);
+
+  assert.equal(exitCode, 0);
+  assert.match(runtime.readStdout(), /# Logs production/);
+  assert.match(runtime.readStdout(), /Règle de sécurité/);
+  assert.equal(runtime.calls.length, 0);
+});
+
+test('logs rejects broad searches without a precise filter', async () => {
+  const runtime = createRuntime();
+  await runtime.sessionStore.saveLogin(DEFAULT_SERVER, {
+    email: 'admin@pandopia.com',
+    accessToken: 'access-token',
+    refreshToken: 'refresh-token',
+    clientId: 'client-id',
+    clientSecret: 'client-secret',
+  });
+
+  const exitCode = await runCli(['logs', '--date', '2026-04-29'], runtime);
+
+  assert.equal(exitCode, 1);
+  assert.match(runtime.readStderr(), /Recherche logs trop large/);
+  assert.equal(runtime.calls.length, 0);
+});
+
+test('logs validates precise filters before calling the API', async () => {
+  const runtime = createRuntime();
+  await runtime.sessionStore.saveLogin(DEFAULT_SERVER, {
+    email: 'admin@pandopia.com',
+    accessToken: 'access-token',
+    refreshToken: 'refresh-token',
+    clientId: 'client-id',
+    clientSecret: 'client-secret',
+  });
+
+  {
+    const exitCode = await runCli(['logs', '--search', 'ab'], runtime);
+    assert.equal(exitCode, 1);
+    assert.match(runtime.readStderr(), /--search doit contenir au moins 3 caractères/);
+  }
+
+  {
+    const exitCode = await runCli(['logs', '--message', 'ok'], runtime);
+    assert.equal(exitCode, 1);
+    assert.match(runtime.readStderr(), /--message doit contenir au moins 3 caractères/);
+  }
+
+  {
+    const exitCode = await runCli(['logs', '--session-id', 'abc'], runtime);
+    assert.equal(exitCode, 1);
+    assert.match(runtime.readStderr(), /--session-id doit contenir au moins 4 caractères/);
+  }
+
+  {
+    const exitCode = await runCli(['logs', '--log-code', '0'], runtime);
+    assert.equal(exitCode, 1);
+    assert.match(runtime.readStderr(), /--log-code doit être un entier strictement positif/);
+  }
+
+  assert.equal(runtime.calls.length, 0);
+});
+
 test('--version and version print the package version', async () => {
   {
     const runtime = createRuntime();
