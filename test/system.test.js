@@ -107,11 +107,15 @@ test('TerminalPrompt askHidden captures masked input on TTY streams', async () =
   input.isTTY = true;
   input.isRaw = false;
   const rawModes = [];
+  let pauseCount = 0;
   input.setRawMode = (value) => {
     rawModes.push(value);
     input.isRaw = value;
   };
   input.resume = () => {};
+  input.pause = () => {
+    pauseCount += 1;
+  };
 
   let output = '';
   const prompt = new TerminalPrompt(input, {
@@ -130,6 +134,7 @@ test('TerminalPrompt askHidden captures masked input on TTY streams', async () =
 
   assert.equal(await answerPromise, 'set');
   assert.deepEqual(rawModes, [true, false]);
+  assert.equal(pauseCount, 1);
   assert.match(output, /^Password: \n$/);
 });
 

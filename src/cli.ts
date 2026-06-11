@@ -272,6 +272,7 @@ function findFirstScalar(
 function buildWhoIAmSummary(input: {
   connected: boolean;
   server: string;
+  cliVersion: string;
   defaultFormat: OutputFormat;
   authState: SessionAuthState;
   payload?: WhoIAmResponse;
@@ -279,6 +280,7 @@ function buildWhoIAmSummary(input: {
   return {
     connected: input.connected,
     server: normalizeServerInput(input.server),
+    cliVersion: input.cliVersion,
     defaultFormat: input.defaultFormat,
     email:
       findFirstScalar(input.payload, ['email', 'mail']) || input.authState.email,
@@ -307,6 +309,7 @@ function buildWhoIAmJsonOutput(
     return {
       connected: summary.connected,
       server: summary.server,
+      cliVersion: summary.cliVersion,
       defaultFormat: summary.defaultFormat,
       email: summary.email,
       organismeRef: summary.organismeRef,
@@ -318,6 +321,7 @@ function buildWhoIAmJsonOutput(
     ...payload,
     connected: summary.connected,
     server: summary.server,
+    cliVersion: summary.cliVersion,
     defaultFormat: summary.defaultFormat,
   };
 }
@@ -417,7 +421,10 @@ async function runWhoIAm(
 ): Promise<number> {
   const server = await resolveServer(deps.sessionStore);
   const authState = await deps.sessionStore.getAuthState(server);
-  const defaultFormat = await deps.sessionStore.getDefaultFormat();
+  const [defaultFormat, cliVersion] = await Promise.all([
+    deps.sessionStore.getDefaultFormat(),
+    getCliVersion(),
+  ]);
   let connected = !!authState.accessToken;
   let payload: WhoIAmResponse | undefined;
 
@@ -438,6 +445,7 @@ async function runWhoIAm(
   const summary = buildWhoIAmSummary({
     connected,
     server,
+    cliVersion,
     defaultFormat,
     authState,
     payload,

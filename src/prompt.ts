@@ -62,6 +62,7 @@ export class TerminalPrompt implements Prompt {
       const cleanup = () => {
         stdin.removeListener('keypress', onKeypress);
         stdin.setRawMode(previousRawMode ?? false);
+        stdin.pause();
         this.output.write('\n');
       };
 

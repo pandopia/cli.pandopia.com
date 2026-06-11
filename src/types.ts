@@ -100,6 +100,7 @@ export interface WhoIAmResponse {
 export interface WhoIAmSummary {
   connected: boolean;
   server: string;
+  cliVersion: string;
   defaultFormat: OutputFormat;
   email?: string;
   organismeRef?: string;

@@ -845,6 +845,7 @@ test('status reports not connected without requiring login', async () => {
   assert.equal(exitCode, 0);
   assert.match(runtime.readStdout(), /Connecté : non/);
   assert.match(runtime.readStdout(), /Serveur : https:\/\/app\.pandopia\.com/);
+  assert.match(runtime.readStdout(), new RegExp(`Version CLI : ${packageJson.version}`));
   assert.match(runtime.readStdout(), /Format par défaut : md/);
   assert.match(runtime.readStdout(), /Email : inconnu/);
   assert.equal(runtime.readStderr(), '');
@@ -883,6 +884,7 @@ test('whoiam uses the auth endpoint and status is an alias', async () => {
   assert.equal(exitCode, 0);
   assert.match(runtime.readStdout(), /Connecté : oui/);
   assert.match(runtime.readStdout(), /Serveur : https:\/\/app\.pandopia\.com/);
+  assert.match(runtime.readStdout(), new RegExp(`Version CLI : ${packageJson.version}`));
   assert.match(runtime.readStdout(), /Format par défaut : md/);
   assert.match(runtime.readStdout(), /Email : admin@pandopia\.com/);
   assert.match(runtime.readStdout(), /Organisation : francehabitation/);
@@ -913,6 +915,7 @@ test('setFormat persists the default format and status exposes it', async () => 
   const statusExitCode = await runCli(['status', '--json'], runtime);
 
   assert.equal(statusExitCode, 0);
+  assert.match(runtime.readStdout().slice(beforeStatus), new RegExp(`"cliVersion": "${packageJson.version}"`));
   assert.match(runtime.readStdout().slice(beforeStatus), /"defaultFormat": "jsonl"/);
 });
 

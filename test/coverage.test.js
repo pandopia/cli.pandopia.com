@@ -326,8 +326,13 @@ test('les helpers de format couvrent les variantes de rendu', () => {
     /manuel/
   );
   assert.equal(
-    renderWhoIAm({ connected: false, server: DEFAULT_SERVER, defaultFormat: 'md' }),
-    `## Statut\n\n- Connecté : non\n- Serveur : ${DEFAULT_SERVER}\n- Format par défaut : md\n- Email : inconnu\n- Organisation : inconnue\n- Identifiant de clé API : inconnu`
+    renderWhoIAm({
+      connected: false,
+      server: DEFAULT_SERVER,
+      cliVersion: packageJson.version,
+      defaultFormat: 'md',
+    }),
+    `## Statut\n\n- Connecté : non\n- Serveur : ${DEFAULT_SERVER}\n- Version CLI : ${packageJson.version}\n- Format par défaut : md\n- Email : inconnu\n- Organisation : inconnue\n- Identifiant de clé API : inconnu`
   );
   assert.equal(renderPrettyJson({ ok: true }), '{\n  "ok": true\n}');
   assert.equal(renderRecords([]), 'Aucun résultat.');
@@ -353,11 +358,15 @@ test('TerminalPrompt gère Ctrl+C et refuse une liste vide', async () => {
   input.isTTY = true;
   input.isRaw = false;
   const rawModes = [];
+  let pauseCount = 0;
   input.setRawMode = (value) => {
     rawModes.push(value);
     input.isRaw = value;
   };
   input.resume = () => {};
+  input.pause = () => {
+    pauseCount += 1;
+  };
 
   let output = '';
   const prompt = new TerminalPrompt(input, {
@@ -376,6 +385,7 @@ test('TerminalPrompt gère Ctrl+C et refuse une liste vide', async () => {
 
   await assert.rejects(answerPromise, /Canceled\./);
   assert.deepEqual(rawModes, [true, false]);
+  assert.equal(pauseCount, 1);
   assert.match(output, /^Password: \n$/);
 
   await assert.rejects(
@@ -1016,6 +1026,7 @@ test('parseArguments, version et runCli couvrent les branches CLI restantes', as
     assert.equal(exitCode, 0);
     assert.match(runtime.readStdout(), /"connected": false/);
     assert.match(runtime.readStdout(), /"server": "https:\/\/app\.pandopia\.com"/);
+    assert.match(runtime.readStdout(), new RegExp(`"cliVersion": "${packageJson.version}"`));
   }
 
   {
@@ -1043,6 +1054,7 @@ test('parseArguments, version et runCli couvrent les branches CLI restantes', as
     assert.match(runtime.readStdout(), /"status": "ok"/);
     assert.match(runtime.readStdout(), /"connected": true/);
     assert.match(runtime.readStdout(), /"server": "https:\/\/app\.pandopia\.com"/);
+    assert.match(runtime.readStdout(), new RegExp(`"cliVersion": "${packageJson.version}"`));
   }
 
   {

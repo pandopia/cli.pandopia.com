@@ -345,6 +345,7 @@ export function renderWhoIAm(summary: WhoIAmSummary): string {
     '',
     `- Connecté : ${summary.connected ? 'oui' : 'non'}`,
     `- Serveur : ${summary.server}`,
+    `- Version CLI : ${summary.cliVersion}`,
     `- Format par défaut : ${summary.defaultFormat}`,
     `- Email : ${summary.email || 'inconnu'}`,
     `- Organisation : ${summary.organismeRef || 'inconnue'}`,
