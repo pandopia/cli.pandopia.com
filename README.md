@@ -24,6 +24,7 @@ pandopia status
 pandopia types
 pandopia params diag_dpereglementaire
 pandopia list diag_dpereglementaire --DIAG_STATUS=valide --organismeRef=lmh_6
+pandopia list git --GIT_TICKETID=20185
 pandopia find diag_dpereglementaire "lmh"
 pandopia get diag_dpereglementaire 1235
 pandopia history diag_dpereglementaire 1235 DIAG_STATUS
@@ -135,6 +136,7 @@ Exemples :
 
 ```bash
 pandopia list diag_dpereglementaire --DIAG_STATUS=valide --organismeRef=lmh_6
+pandopia list git --GIT_TICKETID=20185
 pandopia list diag_dpereglementaire --page 2 --per-page 20 --params DIAG_STATUS,DIAG_DPE_ETIQUETTEDPE
 ```
 
