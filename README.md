@@ -26,6 +26,9 @@ pandopia params diag_dpereglementaire
 pandopia list diag_dpereglementaire --DIAG_STATUS=valide --organismeRef=lmh_6
 pandopia list git --GIT_TICKETID=20185
 pandopia find diag_dpereglementaire "lmh"
+pandopia search CDS-745
+pandopia search CDS-745 --type=diag
+pandopia search "diagnostics validés"
 pandopia get diag_dpereglementaire 1235
 pandopia history diag_dpereglementaire 1235 DIAG_STATUS
 pandopia logs --date 2026-04-29 --log-level ERR --search "SQL"
@@ -148,6 +151,23 @@ Exemple :
 
 ```bash
 pandopia find diag_dpereglementaire "lmh"
+```
+
+### `pandopia search <text> [flags]`
+
+Recherche globalement dans les objets synchronisés avec Meilisearch. Chaque résultat contient
+un champ `type`, réutilisable avec `--type` pour restreindre la recherche.
+
+Options réservées : `--type`, `--page`, `--per-page`, `--md`, `--json` et `--jsonl`.
+
+Types disponibles : `ticket`, `mailstore`, `ficheCEE`, `expertDoc`, `site` et `diag`.
+
+Les guillemets du shell permettent de transmettre une expression contenant des espaces :
+
+```bash
+pandopia search CDS-745
+pandopia search CDS-745 --type=diag
+pandopia search "diagnostics validés"
 ```
 
 ### `pandopia get <catalogType> <objectId>`

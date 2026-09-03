@@ -27,6 +27,19 @@ export interface CatalogListResponse {
   data: Array<Record<string, unknown>>;
 }
 
+export interface CatalogSearchHit {
+  type: string;
+  id: number;
+  score: number;
+  [key: string]: unknown;
+}
+
+export interface CatalogSearchResponse {
+  status: string;
+  pagination: Pagination;
+  data: CatalogSearchHit[];
+}
+
 export interface CatalogObjectResponse {
   status: string;
   data: Record<string, unknown>;

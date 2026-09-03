@@ -4,6 +4,7 @@ import type {
   CatalogListResponse,
   CatalogObjectResponse,
   CatalogParamsResponse,
+  CatalogSearchResponse,
   CatalogTypesResponse,
   LoginEnsureClientResponse,
   MultipleAccountUser,
@@ -295,6 +296,13 @@ export class PandopiaApiClient {
 
   async listTypes(server: string): Promise<CatalogTypesResponse> {
     return this.requestCatalog<CatalogTypesResponse>(server, '/types');
+  }
+
+  async search(
+    server: string,
+    query: Record<string, string[]>
+  ): Promise<CatalogSearchResponse> {
+    return this.requestCatalog<CatalogSearchResponse>(server, '/search', query);
   }
 
   async getParams(server: string, catalogType: string): Promise<CatalogParamsResponse> {

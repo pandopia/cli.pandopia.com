@@ -97,6 +97,7 @@ export function renderRootHelp(status: SessionStatus): string {
     '  pandopia params <catalogType> [flags]       Affiche les filtres et paramètres d’un type',
     '  pandopia list <catalogType> [flags]         Liste les objets du catalogue',
     '  pandopia find <catalogType> <text> [flags]  Alias de list --search',
+    '  pandopia search <text> [--type TYPE]        Recherche globale dans Meilisearch',
     '  pandopia get <catalogType> <objectId> [flags]  Récupère un objet du catalogue',
     '  pandopia history <catalogType> <objectId> <paramCode> [flags]  Affiche un historique',
     '  pandopia logs [flags]                       Recherche dans les logs de production',
@@ -112,6 +113,8 @@ export function renderRootHelp(status: SessionStatus): string {
     '  pandopia list diag_dpereglementaire --DIAG_STATUS=valide --organismeRef=lmh_6',
     '  pandopia list git --GIT_TICKETID=20185',
     '  pandopia find diag_dpereglementaire "lmh"',
+    '  pandopia search "diagnostics validés"',
+    '  pandopia search CDS-745 --type=diag',
     '  pandopia get diag_dpereglementaire 1235',
     '  pandopia history diag_dpereglementaire 1235 DIAG_STATUS',
     '  pandopia logs --date 2026-04-29 --log-level ERR --search "SQL"',
@@ -122,6 +125,7 @@ export function renderCommandUsage(
   command:
     | 'list'
     | 'find'
+    | 'search'
     | 'get'
     | 'params'
     | 'history'
@@ -180,6 +184,21 @@ export function renderCommandUsage(
       '',
       'Astuce :',
       '  Utilisez pandopia types pour découvrir les types de catalogue disponibles.',
+    ].join('\n');
+  }
+
+  if (command === 'search') {
+    return [
+      'Usage :',
+      '  pandopia search <text> [--type TYPE] [--page N] [--per-page N] [--json|--jsonl|--md]',
+      '',
+      'Types disponibles :',
+      '  ticket, mailstore, ficheCEE, expertDoc, site, diag',
+      '',
+      'Exemples :',
+      '  pandopia search CDS-745',
+      '  pandopia search CDS-745 --type=diag',
+      '  pandopia search "diagnostics validés"',
     ].join('\n');
   }
 

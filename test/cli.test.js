@@ -174,6 +174,7 @@ test('pandopia with no args shows help and status', async () => {
   assert.match(runtime.readStdout(), /pandopia history <catalogType> <objectId> <paramCode>/);
   assert.match(runtime.readStdout(), /pandopia --version/);
   assert.match(runtime.readStdout(), /pandopia find <catalogType> <text> \[flags\]/);
+  assert.match(runtime.readStdout(), /pandopia search <text> \[--type TYPE\]/);
   assert.match(runtime.readStdout(), /pandopia logs \[flags\]/);
 });
 
@@ -211,6 +212,13 @@ test('missing args show usage for list, get, and params', async () => {
     const exitCode = await runCli(['find', 'diag_dpereglementaire'], runtime);
     assert.equal(exitCode, 1);
     assert.match(runtime.readStderr(), /pandopia find <catalogType> <text>/);
+  }
+
+  {
+    const runtime = createRuntime();
+    const exitCode = await runCli(['search'], runtime);
+    assert.equal(exitCode, 1);
+    assert.match(runtime.readStderr(), /pandopia search <text>/);
   }
 });
 
@@ -798,6 +806,69 @@ test('find aliases list with search and preserves additional filters', async () 
   assert.match(runtime.readStdout(), /Page 1 \/ 1 \| par page 10 \| total 1/);
   assert.match(runtime.readStdout(), /\| id \| organismeRef \| DIAG_STATUS \|/);
   assert.match(runtime.readStdout(), /\| 1235 \| lmh_6 \| valide \|/);
+});
+
+test('search transmet le type, la pagination et une expression avec espaces', async () => {
+  const runtime = createRuntime({
+    fetchImpl: async (url) => {
+      const requestUrl = new URL(url);
+      assert.equal(requestUrl.pathname, '/api/catalog/search');
+      assert.equal(requestUrl.searchParams.get('q'), 'diagnostics validés');
+      assert.equal(requestUrl.searchParams.get('type'), 'diag');
+      assert.equal(requestUrl.searchParams.get('page'), '2');
+      assert.equal(requestUrl.searchParams.get('perPage'), '5');
+      return createResponse(200, {
+        status: 'ok',
+        pagination: { page: 2, perPage: 5, nbPages: 3, totalNb: 11 },
+        data: [{ type: 'diag', id: 1235, score: 0.91, name: 'Diagnostic validé' }],
+      });
+    },
+  });
+
+  await runtime.sessionStore.saveLogin(DEFAULT_SERVER, {
+    email: 'admin@pandopia.com',
+    accessToken: 'access-token',
+    refreshToken: 'refresh-token',
+    clientId: 'client-id',
+    clientSecret: 'client-secret',
+  });
+
+  const exitCode = await runCli(
+    ['search', 'diagnostics validés', '--type=diag', '--page', '2', '--per-page=5'],
+    runtime
+  );
+
+  assert.equal(exitCode, 0);
+  assert.match(runtime.readStdout(), /Page 2 \/ 3 \| par page 5 \| total 11/);
+  assert.match(runtime.readStdout(), /\| diag \| 1235 \| 0.91 \| Diagnostic validé \|/);
+});
+
+test('search conserve aussi plusieurs mots non regroupés par le shell et produit du jsonl', async () => {
+  const runtime = createRuntime({
+    fetchImpl: async (url) => {
+      const requestUrl = new URL(url);
+      assert.equal(requestUrl.pathname, '/api/catalog/search');
+      assert.equal(requestUrl.searchParams.get('q'), 'diagnostics validés');
+      return createResponse(200, {
+        status: 'ok',
+        pagination: { page: 1, perPage: 10, nbPages: 1, totalNb: 1 },
+        data: [{ type: 'diag', id: 1235, score: 1 }],
+      });
+    },
+  });
+
+  await runtime.sessionStore.saveLogin(DEFAULT_SERVER, {
+    email: 'admin@pandopia.com',
+    accessToken: 'access-token',
+    refreshToken: 'refresh-token',
+    clientId: 'client-id',
+    clientSecret: 'client-secret',
+  });
+
+  const exitCode = await runCli(['search', 'diagnostics', 'validés', '--jsonl'], runtime);
+
+  assert.equal(exitCode, 0);
+  assert.equal(runtime.readStdout(), '{"type":"diag","id":1235,"score":1}\n');
 });
 
 test('catalog commands retry on the dispatch route when the live route is misconfigured', async () => {

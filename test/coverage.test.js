@@ -276,6 +276,7 @@ test('les helpers de format couvrent les variantes de rendu', () => {
   );
   assert.match(renderCommandUsage('list'), /pandopia list <catalogType>/);
   assert.match(renderCommandUsage('find'), /pandopia find <catalogType> <text>/);
+  assert.match(renderCommandUsage('search'), /pandopia search <text>/);
   assert.match(renderCommandUsage('get'), /pandopia get <catalogType> <objectId>/);
   assert.match(renderCommandUsage('history'), /pandopia history <catalogType> <objectId> <paramCode>/);
   assert.match(renderCommandUsage('logs'), /# Logs production/);

@@ -145,6 +145,21 @@ function buildGetQuery(parsed: ParsedArguments): Record<string, string[]> {
   return query;
 }
 
+function buildSearchQuery(parsed: ParsedArguments, searchText: string): Record<string, string[]> {
+  const query: Record<string, string[]> = {};
+  addQueryValue(query, 'q', searchText);
+  if (parsed.passthrough.type?.[0]) {
+    addQueryValue(query, 'type', parsed.passthrough.type[0]);
+  }
+  if (typeof parsed.reserved.page === 'string') {
+    addQueryValue(query, 'page', parsed.reserved.page);
+  }
+  if (typeof parsed.reserved['per-page'] === 'string') {
+    addQueryValue(query, 'perPage', parsed.reserved['per-page']);
+  }
+  return query;
+}
+
 async function resolveServer(sessionStore: SessionStore): Promise<string> {
   return sessionStore.getActiveServer();
 }
@@ -587,6 +602,31 @@ async function runFind(
   );
 }
 
+async function runSearch(
+  parsed: ParsedArguments,
+  deps: CliDependencies
+): Promise<number> {
+  const searchText = parsed.positionals.slice(1).join(' ').trim();
+  if (!searchText) {
+    writeLine(deps.stderr, renderCommandUsage('search'));
+    return 1;
+  }
+
+  const server = await resolveServer(deps.sessionStore);
+  const payload = await deps.apiClient.search(server, buildSearchQuery(parsed, searchText));
+  const format = await resolveOutputFormat(parsed, deps.sessionStore);
+  writeLine(
+    deps.stdout,
+    renderOutput({
+      format,
+      markdown: [renderPagination(payload.pagination), '', renderRecords(payload.data)].join('\n'),
+      jsonValue: payload,
+      jsonlValue: payload.data,
+    })
+  );
+  return 0;
+}
+
 async function runGet(
   parsed: ParsedArguments,
   deps: CliDependencies
@@ -799,6 +839,8 @@ export async function runCli(
         return await runList(parsed, deps);
       case 'find':
         return await runFind(parsed, deps);
+      case 'search':
+        return await runSearch(parsed, deps);
       case 'get':
         return await runGet(parsed, deps);
       case 'history':
